@@ -15,6 +15,11 @@
    limitations under the License.
 -->
 <resources>
+    <color name="white">#FFF</color>
+    <color name="black">#000</color>
+    <color name="blue_a400">#2979FF</color>
+    <color name="red_a200">#FF5252</color>
+
     <color name="face_background">#000</color>
     <color name="face_time">#FFF</color>
     <color name="face_time_dimmed">#DEDEDE</color>
