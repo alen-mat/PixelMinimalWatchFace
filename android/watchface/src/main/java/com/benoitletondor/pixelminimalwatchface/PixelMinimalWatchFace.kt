@@ -193,17 +193,16 @@ class PixelMinimalWatchFace : WatchFaceService() {
         currentUserStyleRepository = currentUserStyleRepository,
         watchState = watchState,
         canvasType = canvasType,
-        interactiveDrawModeUpdateDelayMillis = 16L, // FIXME dynamic
+        interactiveDrawModeUpdateDelayMillis = 1000L, // FIXME dynamic
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-        private var useAndroid12Style = storage.useAndroid12Style()
         private var watchFaceDrawer: WatchFaceDrawer
 
         init {
-            watchFaceDrawer = createWatchFaceDrawer()
+            watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
 
-            updateWatchFaceDrawerOnVisibilityChange()
+            updateWatchFaceDrawerWhenChanged()
         }
 
         override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {
@@ -212,27 +211,21 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
         override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {}
 
-        private fun createWatchFaceDrawer(): WatchFaceDrawer {
-            if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? ${storage.useAndroid12Style()}")
+        private fun createWatchFaceDrawer(useAndroid12Style: Boolean): WatchFaceDrawer {
+            if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
 
-            return if (storage.useAndroid12Style()) {
+            return if (useAndroid12Style) {
                 Android12DigitalWatchFaceDrawer(context, storage)
             } else {
                 RegularDigitalWatchFaceDrawer(context, storage)
             }
         }
 
-        private fun updateWatchFaceDrawerOnVisibilityChange() {
+        private fun updateWatchFaceDrawerWhenChanged() {
             scope.launch {
-                watchState.isVisible
-                    .collect { isVisible ->
-                        if (isVisible == true) {
-                            val shouldUseAndroid12Style = storage.useAndroid12Style()
-                            if (shouldUseAndroid12Style != useAndroid12Style) {
-                                useAndroid12Style = shouldUseAndroid12Style
-                                watchFaceDrawer = createWatchFaceDrawer()
-                            }
-                        }
+                storage.watchUseAndroid12Style()
+                    .collect { useAndroid12Style ->
+                        createWatchFaceDrawer(useAndroid12Style)
                     }
             }
         }

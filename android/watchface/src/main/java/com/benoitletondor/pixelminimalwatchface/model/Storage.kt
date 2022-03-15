@@ -20,6 +20,7 @@ import android.graphics.ColorFilter
 import androidx.annotation.ColorInt
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.helper.DEFAULT_TIME_SIZE
+import kotlinx.coroutines.flow.Flow
 
 const val DEFAULT_APP_VERSION = -1
 
@@ -106,6 +107,7 @@ interface Storage {
     fun setBatteryIndicatorColor(@ColorInt color: Int)
     fun useAndroid12Style(): Boolean
     fun setUseAndroid12Style(useAndroid12Style: Boolean)
+    fun watchUseAndroid12Style(): Flow<Boolean>
     fun hideBatteryInAmbient(): Boolean
     fun setHideBatteryInAmbient(hide: Boolean)
     fun getSecondRingColor(): ColorFilter
@@ -352,6 +354,8 @@ class StorageImpl(
     override fun useAndroid12Style(): Boolean = useAndroid12StyleCache.get()
 
     override fun setUseAndroid12Style(useAndroid12Style: Boolean) = useAndroid12StyleCache.set(useAndroid12Style)
+
+    override fun watchUseAndroid12Style(): Flow<Boolean> = useAndroid12StyleCache.watchChanges()
 
     override fun hideBatteryInAmbient(): Boolean = hideBatteryInAmbientCache.get()
 
