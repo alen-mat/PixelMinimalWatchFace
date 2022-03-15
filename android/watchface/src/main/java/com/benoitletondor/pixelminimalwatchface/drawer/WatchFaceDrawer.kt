@@ -16,15 +16,20 @@
 package com.benoitletondor.pixelminimalwatchface.drawer
 
 import android.graphics.Canvas
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.support.wearable.complications.ComplicationData
 import android.util.SparseArray
 import android.view.WindowInsets
 import com.benoitletondor.pixelminimalwatchface.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
+import java.time.ZonedDateTime
 import java.util.*
 
 interface WatchFaceDrawer {
+    fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime)
+
+
     fun initializeComplicationDrawables(drawableCallback: Drawable.Callback): IntArray
     fun onApplyWindowInsets(insets: WindowInsets)
     fun onSurfaceChanged(width: Int, height: Int)

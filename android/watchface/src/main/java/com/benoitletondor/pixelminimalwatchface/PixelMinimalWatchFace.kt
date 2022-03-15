@@ -21,13 +21,12 @@ import android.content.*
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.graphics.Canvas
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.support.wearable.complications.*
-import android.support.wearable.watchface.CanvasWatchFaceService
-import android.support.wearable.watchface.WatchFaceService
 import android.support.wearable.watchface.WatchFaceStyle
 import android.util.Log
 import android.util.SparseArray
@@ -36,6 +35,17 @@ import android.view.WindowInsets
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.wear.watchface.*
+import androidx.wear.watchface.complications.ComplicationSlotBounds
+import androidx.wear.watchface.complications.DefaultComplicationDataSourcePolicy
+import androidx.wear.watchface.complications.data.ComplicationType
+import androidx.wear.watchface.complications.rendering.CanvasComplicationDrawable
+import androidx.wear.watchface.complications.rendering.ComplicationDrawable
+import androidx.wear.watchface.style.CurrentUserStyleRepository
+import androidx.wear.watchface.style.UserStyle
+import androidx.wear.watchface.style.UserStyleSchema
+import androidx.wear.watchface.style.UserStyleSetting
+import androidx.wear.watchface.style.data.OptionWireFormat
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
@@ -51,6 +61,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.lang.ref.WeakReference
 import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import java.util.*
 import java.util.concurrent.Executors
 import kotlin.collections.HashSet
@@ -65,7 +76,167 @@ private const val MINIMUM_COMPLICATION_UPDATE_INTERVAL_MS = 1000L
 val DEBUG_LOGS = BuildConfig.DEBUG
 private const val TAG = "PixelMinimalWatchFace"
 
-class PixelMinimalWatchFace : CanvasWatchFaceService() {
+class PixelMinimalWatchFace : WatchFaceService() {
+    private val leftComplicationDrawable = ComplicationDrawable()
+    private val middleComplicationDrawable = ComplicationDrawable()
+    private val rightComplicationDrawable = ComplicationDrawable()
+
+    override fun createComplicationSlotsManager(currentUserStyleRepository: CurrentUserStyleRepository): ComplicationSlotsManager {
+        fun buildCanvasComplicationFactory(complicationDrawable: ComplicationDrawable): CanvasComplicationFactory {
+            return CanvasComplicationFactory { watchState, listener ->
+                CanvasComplicationDrawable(
+                    complicationDrawable,
+                    watchState,
+                    listener
+                )
+            }
+        }
+
+        val leftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = LEFT_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(leftComplicationDrawable),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.LEFT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = ComplicationSlotBounds(
+                RectF(
+                    LEFT_COMPLICATION_LEFT_BOUND,
+                    LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
+                    LEFT_COMPLICATION_RIGHT_BOUND,
+                    LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND
+                )
+            )
+        ).build()
+
+        val middleComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = MIDDLE_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(middleComplicationDrawable),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.MIDDLE),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = ComplicationSlotBounds(
+                RectF(
+                    MIDDLE_COMPLICATION_LEFT_BOUND,
+                    LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
+                    MIDDLE_COMPLICATION_RIGHT_BOUND,
+                    LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND
+                )
+            )
+        ).build()
+
+        val rightComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = RIGHT_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(rightComplicationDrawable),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.RIGHT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = ComplicationSlotBounds(
+                RectF(
+                    RIGHT_COMPLICATION_LEFT_BOUND,
+                    LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
+                    RIGHT_COMPLICATION_RIGHT_BOUND,
+                    LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND
+                )
+            )
+        ).build()
+
+        return ComplicationSlotsManager(
+            listOf(
+                leftComplication,
+                middleComplication,
+                rightComplication,
+            ),
+            currentUserStyleRepository,
+        )
+    }
+
+    override suspend fun createWatchFace(
+        surfaceHolder: SurfaceHolder,
+        watchState: WatchState,
+        complicationSlotsManager: ComplicationSlotsManager,
+        currentUserStyleRepository: CurrentUserStyleRepository,
+    ): WatchFace {
+        val storage = Injection.storage(this)
+
+        // Set app version to the current one if not set yet (first launch)
+        if (storage.getAppVersion() == DEFAULT_APP_VERSION) {
+            storage.setAppVersion(BuildConfig.VERSION_CODE)
+        }
+
+        if (DEBUG_LOGS) Log.d(TAG, "createWatchFace. Security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
+
+        // Creates class that renders the watch face.
+        val renderer = WatchFaceRenderer(
+            context = applicationContext,
+            surfaceHolder = surfaceHolder,
+            watchState = watchState,
+            complicationSlotsManager = complicationSlotsManager,
+            currentUserStyleRepository = currentUserStyleRepository,
+            canvasType = CanvasType.SOFTWARE,
+            storage = storage,
+        )
+
+        // Creates the watch face.
+        return WatchFace(
+            watchFaceType = WatchFaceType.DIGITAL,
+            renderer = renderer,
+        )
+    }
+
+    private class WatchFaceRenderer(
+        private val context: Context,
+        surfaceHolder: SurfaceHolder,
+        private val watchState: WatchState,
+        private val complicationSlotsManager: ComplicationSlotsManager,
+        currentUserStyleRepository: CurrentUserStyleRepository,
+        canvasType: Int,
+        private val storage: Storage,
+    ) : Renderer.CanvasRenderer(
+        surfaceHolder = surfaceHolder,
+        currentUserStyleRepository = currentUserStyleRepository,
+        watchState = watchState,
+        canvasType = canvasType,
+        interactiveDrawModeUpdateDelayMillis = 16L, // FIXME dynamic
+    ) {
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+        private var useAndroid12Style = storage.useAndroid12Style()
+        private var watchFaceDrawer: WatchFaceDrawer
+
+        init {
+            watchFaceDrawer = createWatchFaceDrawer()
+
+            updateWatchFaceDrawerOnVisibilityChange()
+        }
+
+        override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {
+            watchFaceDrawer.render(canvas, bounds, zonedDateTime)
+        }
+
+        override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {}
+
+        private fun createWatchFaceDrawer(): WatchFaceDrawer {
+            if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? ${storage.useAndroid12Style()}")
+
+            return if (storage.useAndroid12Style()) {
+                Android12DigitalWatchFaceDrawer(context, storage)
+            } else {
+                RegularDigitalWatchFaceDrawer(context, storage)
+            }
+        }
+
+        private fun updateWatchFaceDrawerOnVisibilityChange() {
+            scope.launch {
+                watchState.isVisible
+                    .collect { isVisible ->
+                        if (isVisible == true) {
+                            val shouldUseAndroid12Style = storage.useAndroid12Style()
+                            if (shouldUseAndroid12Style != useAndroid12Style) {
+                                useAndroid12Style = shouldUseAndroid12Style
+                                watchFaceDrawer = createWatchFaceDrawer()
+                            }
+                        }
+                    }
+            }
+        }
+    }
 
     override fun onCreateEngine(): Engine {
         val storage = Injection.storage(this)
@@ -917,6 +1088,18 @@ class PixelMinimalWatchFace : CanvasWatchFaceService() {
         const val ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID = 108
         const val ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID = 109
 
+        private const val LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND = 0.15f
+        private const val LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND = 0.4f
+
+        private const val LEFT_COMPLICATION_LEFT_BOUND = 0.15f
+        private const val LEFT_COMPLICATION_RIGHT_BOUND = 0.35f
+
+        private const val MIDDLE_COMPLICATION_LEFT_BOUND = 0.40f
+        private const val MIDDLE_COMPLICATION_RIGHT_BOUND = 0.60f
+
+        private const val RIGHT_COMPLICATION_LEFT_BOUND = 0.65f
+        private const val RIGHT_COMPLICATION_RIGHT_BOUND = 0.85f
+
         private val COMPLICATION_IDS = intArrayOf(
             LEFT_COMPLICATION_ID,
             MIDDLE_COMPLICATION_ID,
@@ -928,18 +1111,16 @@ class PixelMinimalWatchFace : CanvasWatchFaceService() {
             ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID,
         )
 
-        private val normalComplicationDataTypes = intArrayOf(
-            ComplicationData.TYPE_SHORT_TEXT,
-            ComplicationData.TYPE_ICON,
-            ComplicationData.TYPE_RANGED_VALUE,
-            ComplicationData.TYPE_SMALL_IMAGE
+        private val normalComplicationDataTypes = listOf(
+            ComplicationType.SHORT_TEXT,
+            ComplicationType.RANGED_VALUE,
+            ComplicationType.SMALL_IMAGE
         )
 
-        private val largeComplicationDataTypes = intArrayOf(
-            ComplicationData.TYPE_LONG_TEXT,
-            ComplicationData.TYPE_SHORT_TEXT,
-            ComplicationData.TYPE_ICON,
-            ComplicationData.TYPE_SMALL_IMAGE
+        private val largeComplicationDataTypes = listOf(
+            ComplicationType.LONG_TEXT,
+            ComplicationType.SHORT_TEXT,
+            ComplicationType.SMALL_IMAGE,
         )
 
         fun getComplicationId(complicationLocation: ComplicationLocation): Int {
@@ -955,7 +1136,7 @@ class PixelMinimalWatchFace : CanvasWatchFaceService() {
             }
         }
 
-        fun getSupportedComplicationTypes(complicationLocation: ComplicationLocation): IntArray {
+        fun getSupportedComplicationTypes(complicationLocation: ComplicationLocation): List<ComplicationType> {
             return when (complicationLocation) {
                 ComplicationLocation.LEFT -> normalComplicationDataTypes
                 ComplicationLocation.MIDDLE -> normalComplicationDataTypes

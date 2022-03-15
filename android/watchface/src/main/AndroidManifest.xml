@@ -94,6 +94,10 @@
             android:exported="true">
 
             <meta-data
+                android:name="android.service.wallpaper.square_mode"
+                android:value="false" />
+
+            <meta-data
                 android:name="android.service.wallpaper"
                 android:resource="@xml/watch_face" />
             <meta-data
