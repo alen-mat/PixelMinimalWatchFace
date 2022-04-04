@@ -174,6 +174,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
             updateWatchFaceDrawerWhenChanged()
             watchComplicationsDataProviderChanges()
+            watchGalaxyWatch4HRComplications()
         }
 
         override fun onDestroy() {
@@ -192,6 +193,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private fun createWatchFaceDrawer(useAndroid12Style: Boolean): WatchFaceDrawer {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
 
+            galaxyWatch4HeartRateComplicationsIds.value = emptySet()
             recomputeComplicationsBounds()
 
             return if (useAndroid12Style) {
@@ -217,6 +219,21 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     .collectLatest { isVisible ->
                         if (isVisible == true) {
                             updateComplicationsProviderData()
+                        }
+                    }
+            }
+        }
+
+        private fun watchGalaxyWatch4HRComplications() {
+            scope.launch {
+                galaxyWatch4HeartRateComplicationsIds
+                    .map { it.isNotEmpty() }
+                    .distinctUntilChanged()
+                    .collect { hasGalaxyWatch4HRComplication ->
+                        if (hasGalaxyWatch4HRComplication) {
+                            onGalaxyWatch4HeartRateComplicationAdded()
+                        } else {
+                            onGalaxyWatch4HeartRateComplicationRemoved()
                         }
                     }
             }
@@ -251,24 +268,15 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 }
 
                 val currentHRComplicationIds = galaxyWatch4HeartRateComplicationsIds.value
-                val hasGW4HRComplication = currentHRComplicationIds.isNotEmpty()
                 val isGalaxyWatch4HeartRateComplication = complicationProviderInfo?.isSamsungHeartRateProvider() == true
                 if (isGalaxyWatch4HeartRateComplication) {
                     if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, GW4 HR complication detected, id: $watchFaceComplicationId")
                     galaxyWatch4HeartRateComplicationsIds.value = HashSet(currentHRComplicationIds).apply {
                         add(watchFaceComplicationId)
                     }
-
-                    if (!hasGW4HRComplication && galaxyWatch4HeartRateComplicationsIds.value.isNotEmpty()) {
-                        onGalaxyWatch4HeartRateComplicationAdded()
-                    }
                 } else {
                     galaxyWatch4HeartRateComplicationsIds.value = HashSet(currentHRComplicationIds).apply {
                         remove(watchFaceComplicationId)
-                    }
-
-                    if (hasGW4HRComplication && galaxyWatch4HeartRateComplicationsIds.value.isEmpty()) {
-                        onGalaxyWatch4HeartRateComplicationRemoved()
                     }
                 }
 
