@@ -36,15 +36,14 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.wear.watchface.*
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
+import androidx.wear.watchface.complications.ComplicationDataSourceInfoRetriever
 import androidx.wear.watchface.complications.ComplicationSlotBounds
 import androidx.wear.watchface.complications.DefaultComplicationDataSourcePolicy
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.rendering.CanvasComplicationDrawable
 import androidx.wear.watchface.complications.rendering.ComplicationDrawable
-import androidx.wear.watchface.style.CurrentUserStyleRepository
-import androidx.wear.watchface.style.UserStyle
-import androidx.wear.watchface.style.UserStyleSchema
-import androidx.wear.watchface.style.UserStyleSetting
+import androidx.wear.watchface.style.*
 import androidx.wear.watchface.style.data.OptionWireFormat
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
@@ -66,6 +65,7 @@ import java.util.*
 import java.util.concurrent.Executors
 import kotlin.collections.HashSet
 import kotlin.math.max
+import kotlin.random.Random
 
 const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 private const val DATA_KEY_PREMIUM = "premium"
@@ -77,75 +77,42 @@ val DEBUG_LOGS = BuildConfig.DEBUG
 private const val TAG = "PixelMinimalWatchFace"
 
 class PixelMinimalWatchFace : WatchFaceService() {
-    private val leftComplicationDrawable = ComplicationDrawable()
-    private val middleComplicationDrawable = ComplicationDrawable()
-    private val rightComplicationDrawable = ComplicationDrawable()
+    private lateinit var storage: Storage
 
-    override fun createComplicationSlotsManager(currentUserStyleRepository: CurrentUserStyleRepository): ComplicationSlotsManager {
-        fun buildCanvasComplicationFactory(complicationDrawable: ComplicationDrawable): CanvasComplicationFactory {
-            return CanvasComplicationFactory { watchState, listener ->
-                CanvasComplicationDrawable(
-                    complicationDrawable,
-                    watchState,
-                    listener
-                )
-            }
+    override fun onCreate() {
+        super.onCreate()
+
+        if (DEBUG_LOGS) Log.d(TAG, "onCreate")
+
+        storage = Injection.storage(this)
+
+        // Set app version to the current one if not set yet (first launch)
+        if (storage.getAppVersion() == DEFAULT_APP_VERSION) {
+            storage.setAppVersion(BuildConfig.VERSION_CODE)
         }
-
-        val leftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
-            id = LEFT_COMPLICATION_ID,
-            canvasComplicationFactory = buildCanvasComplicationFactory(leftComplicationDrawable),
-            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.LEFT),
-            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
-            bounds = ComplicationSlotBounds(
-                RectF(
-                    LEFT_COMPLICATION_LEFT_BOUND,
-                    LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
-                    LEFT_COMPLICATION_RIGHT_BOUND,
-                    LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND
-                )
-            )
-        ).build()
-
-        val middleComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
-            id = MIDDLE_COMPLICATION_ID,
-            canvasComplicationFactory = buildCanvasComplicationFactory(middleComplicationDrawable),
-            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.MIDDLE),
-            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
-            bounds = ComplicationSlotBounds(
-                RectF(
-                    MIDDLE_COMPLICATION_LEFT_BOUND,
-                    LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
-                    MIDDLE_COMPLICATION_RIGHT_BOUND,
-                    LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND
-                )
-            )
-        ).build()
-
-        val rightComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
-            id = RIGHT_COMPLICATION_ID,
-            canvasComplicationFactory = buildCanvasComplicationFactory(rightComplicationDrawable),
-            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.RIGHT),
-            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
-            bounds = ComplicationSlotBounds(
-                RectF(
-                    RIGHT_COMPLICATION_LEFT_BOUND,
-                    LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
-                    RIGHT_COMPLICATION_RIGHT_BOUND,
-                    LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND
-                )
-            )
-        ).build()
-
-        return ComplicationSlotsManager(
-            listOf(
-                leftComplication,
-                middleComplication,
-                rightComplication,
-            ),
-            currentUserStyleRepository,
-        )
     }
+
+    override fun createComplicationSlotsManager(currentUserStyleRepository: CurrentUserStyleRepository) = ComplicationSlotsManager(
+        createComplicationsSlots(this, storage),
+        currentUserStyleRepository,
+    )
+
+    override fun createUserStyleSchema(): UserStyleSchema = UserStyleSchema(
+        listOf(
+            UserStyleSetting.DoubleRangeUserStyleSetting(
+                UserStyleSetting.Id(COMPLICATIONS_BOUNDS_RECOMPUTE_USER_SETTING_ID),
+                displayName = "",
+                description = "",
+                icon = null,
+                affectsWatchFaceLayers = listOf(
+                    WatchFaceLayer.COMPLICATIONS,
+                ),
+                minimumValue = Double.MIN_VALUE,
+                maximumValue = Double.MAX_VALUE,
+                defaultValue = Random.nextDouble(),
+            )
+        )
+    )
 
     override suspend fun createWatchFace(
         surfaceHolder: SurfaceHolder,
@@ -153,13 +120,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
         complicationSlotsManager: ComplicationSlotsManager,
         currentUserStyleRepository: CurrentUserStyleRepository,
     ): WatchFace {
-        val storage = Injection.storage(this)
-
-        // Set app version to the current one if not set yet (first launch)
-        if (storage.getAppVersion() == DEFAULT_APP_VERSION) {
-            storage.setAppVersion(BuildConfig.VERSION_CODE)
-        }
-
         if (DEBUG_LOGS) Log.d(TAG, "createWatchFace. Security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
 
         // Creates class that renders the watch face.
@@ -185,7 +145,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         surfaceHolder: SurfaceHolder,
         private val watchState: WatchState,
         private val complicationSlotsManager: ComplicationSlotsManager,
-        currentUserStyleRepository: CurrentUserStyleRepository,
+        private val currentUserStyleRepository: CurrentUserStyleRepository,
         canvasType: Int,
         private val storage: Storage,
     ) : Renderer.CanvasRenderer(
@@ -193,16 +153,34 @@ class PixelMinimalWatchFace : WatchFaceService() {
         currentUserStyleRepository = currentUserStyleRepository,
         watchState = watchState,
         canvasType = canvasType,
-        interactiveDrawModeUpdateDelayMillis = 1000L, // FIXME dynamic
+        interactiveDrawModeUpdateDelayMillis = 60000L,
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
         private var watchFaceDrawer: WatchFaceDrawer
 
+        private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
+        private val complicationProviderSparseArray: SparseArray<ComplicationDataSourceInfo> = SparseArray(COMPLICATION_IDS.size)
+
+        // TODO implement this
+        private var lastGalaxyWatch4CalendarWidgetForcedRefreshTs: Long? = null
+        private val calendarBuggyComplicationsIds = mutableSetOf<Int>()
+
+        private val galaxyWatch4HeartRateComplicationsIds = MutableStateFlow<Set<Int>>(emptySet())
+        private var galaxyWatch4HeartRateWatcherJob: Job? = null
+
         init {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
 
             updateWatchFaceDrawerWhenChanged()
+            watchComplicationsDataProviderChanges()
+        }
+
+        override fun onDestroy() {
+            scope.cancel()
+            complicationDataSourceInfoRetriever.close()
+
+            super.onDestroy()
         }
 
         override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {
@@ -213,6 +191,8 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
         private fun createWatchFaceDrawer(useAndroid12Style: Boolean): WatchFaceDrawer {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
+
+            recomputeComplicationsBounds()
 
             return if (useAndroid12Style) {
                 Android12DigitalWatchFaceDrawer(context, storage)
@@ -225,9 +205,134 @@ class PixelMinimalWatchFace : WatchFaceService() {
             scope.launch {
                 storage.watchUseAndroid12Style()
                     .collect { useAndroid12Style ->
-                        createWatchFaceDrawer(useAndroid12Style)
+                        watchFaceDrawer = createWatchFaceDrawer(useAndroid12Style)
+                        updateComplicationsProviderData()
                     }
             }
+        }
+
+        private fun watchComplicationsDataProviderChanges() {
+            scope.launch {
+                watchState.isVisible
+                    .collectLatest { isVisible ->
+                        if (isVisible == true) {
+                            updateComplicationsProviderData()
+                        }
+                    }
+            }
+        }
+
+        private suspend fun updateComplicationsProviderData() {
+            val results = complicationDataSourceInfoRetriever.retrieveComplicationDataSourceInfo(
+                ComponentName(context, PixelMinimalWatchFace::class.java),
+                COMPLICATION_IDS,
+            ) ?: return
+
+            results.forEach { result ->
+                val watchFaceComplicationId = result.slotId
+                val complicationProviderInfo = result.info
+
+                if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, watchFaceComplicationId: $watchFaceComplicationId -> provider: $complicationProviderInfo")
+
+                val currentValue = complicationProviderSparseArray.get(watchFaceComplicationId, null)
+
+                if(complicationProviderInfo != null) {
+                    complicationProviderSparseArray.put(watchFaceComplicationId, complicationProviderInfo)
+                } else {
+                    complicationProviderSparseArray.remove(watchFaceComplicationId)
+                }
+
+                val isCalendarBuggyComplication = complicationProviderInfo?.isSamsungCalendarBuggyProvider() == true
+                if (isCalendarBuggyComplication) {
+                    if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, buggy calendar complication detected, id: $watchFaceComplicationId")
+                    calendarBuggyComplicationsIds.add(watchFaceComplicationId)
+                } else {
+                    calendarBuggyComplicationsIds.remove(watchFaceComplicationId)
+                }
+
+                val currentHRComplicationIds = galaxyWatch4HeartRateComplicationsIds.value
+                val hasGW4HRComplication = currentHRComplicationIds.isNotEmpty()
+                val isGalaxyWatch4HeartRateComplication = complicationProviderInfo?.isSamsungHeartRateProvider() == true
+                if (isGalaxyWatch4HeartRateComplication) {
+                    if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, GW4 HR complication detected, id: $watchFaceComplicationId")
+                    galaxyWatch4HeartRateComplicationsIds.value = HashSet(currentHRComplicationIds).apply {
+                        add(watchFaceComplicationId)
+                    }
+
+                    if (!hasGW4HRComplication && galaxyWatch4HeartRateComplicationsIds.value.isNotEmpty()) {
+                        onGalaxyWatch4HeartRateComplicationAdded()
+                    }
+                } else {
+                    galaxyWatch4HeartRateComplicationsIds.value = HashSet(currentHRComplicationIds).apply {
+                        remove(watchFaceComplicationId)
+                    }
+
+                    if (hasGW4HRComplication && galaxyWatch4HeartRateComplicationsIds.value.isEmpty()) {
+                        onGalaxyWatch4HeartRateComplicationRemoved()
+                    }
+                }
+
+                // FIXME compare values not references
+                if (currentValue != complicationProviderInfo) {
+                    if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, updating data from complicationId: $watchFaceComplicationId")
+
+                    onComplicationDataUpdate(
+                        watchFaceComplicationId,
+                        rawComplicationDataSparseArray.get(
+                            watchFaceComplicationId,
+                            ComplicationData.Builder(ComplicationData.TYPE_EMPTY).build(),
+                        )
+                    )
+                }
+            }
+        }
+
+        private fun onGalaxyWatch4HeartRateComplicationRemoved() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationRemoved")
+
+            galaxyWatch4HeartRateWatcherJob?.cancel()
+            galaxyWatch4HeartRateWatcherJob = null
+        }
+
+        private fun onGalaxyWatch4HeartRateComplicationAdded() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationAdded")
+
+            galaxyWatch4HeartRateWatcherJob?.cancel()
+            galaxyWatch4HeartRateWatcherJob = scope.launch {
+                galaxyWatch4HeartRateComplicationsIds
+                    .flatMapLatest { complicationIds ->
+                        context.watchSamsungHeartRateUpdates()
+                            .map { complicationIds }
+                    }
+                    .collect { complicationIds ->
+                        if (DEBUG_LOGS) Log.d(TAG, "galaxyWatch4HeartRateWatcher, new value received")
+
+                        for(complicationId in complicationIds) {
+                            if (DEBUG_LOGS) Log.d(TAG, "galaxyWatch4HeartRateWatcher, refreshing for complication $complicationId")
+
+                            onComplicationDataUpdate(
+                                complicationId,
+                                rawComplicationDataSparseArray.get(
+                                    complicationId,
+                                    ComplicationData.Builder(ComplicationData.TYPE_EMPTY).build(),
+                                )
+                            )
+                        }
+                    }
+            }
+        }
+
+        private fun recomputeComplicationsBounds() {
+            currentUserStyleRepository.updateUserStyle(
+                currentUserStyleRepository.userStyle.value
+                    .toMutableUserStyle().apply {
+                        set(
+                            UserStyleSetting.Id(COMPLICATIONS_BOUNDS_RECOMPUTE_USER_SETTING_ID),
+                            UserStyleSetting.DoubleRangeUserStyleSetting.DoubleRangeOption(Random.nextDouble()),
+                        )
+                    }
+                    .toUserStyle()
+            )
         }
     }
 
@@ -1068,6 +1173,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
     }
 
     companion object {
+        private const val COMPLICATIONS_BOUNDS_RECOMPUTE_USER_SETTING_ID = "ComplicationsBoundsRecompute"
         private const val HALF_HOUR_MS = 1000*60*30
 
         const val LEFT_COMPLICATION_ID = 100
@@ -1080,18 +1186,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
         const val ANDROID_12_TOP_RIGHT_COMPLICATION_ID = 107
         const val ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID = 108
         const val ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID = 109
-
-        private const val LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND = 0.15f
-        private const val LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND = 0.4f
-
-        private const val LEFT_COMPLICATION_LEFT_BOUND = 0.15f
-        private const val LEFT_COMPLICATION_RIGHT_BOUND = 0.35f
-
-        private const val MIDDLE_COMPLICATION_LEFT_BOUND = 0.40f
-        private const val MIDDLE_COMPLICATION_RIGHT_BOUND = 0.60f
-
-        private const val RIGHT_COMPLICATION_LEFT_BOUND = 0.65f
-        private const val RIGHT_COMPLICATION_RIGHT_BOUND = 0.85f
 
         private val COMPLICATION_IDS = intArrayOf(
             LEFT_COMPLICATION_ID,
