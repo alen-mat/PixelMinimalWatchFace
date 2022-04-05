@@ -173,29 +173,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchComplicationsDataChangesAndSanitize()
         }
 
-        private fun watchComplicationsDataChangesAndSanitize() {
-            complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
-                scope.launch {
-                    var lastSanitizedData: ComplicationData? = null
-                    slot.complicationData.collect { complicationData ->
-                        if (complicationData != lastSanitizedData) {
-                            rawComplicationDataSparseArray.put(slot.id, complicationData)
-                        }
-
-                        complicationData.sanitizeIfNeeded(
-                            context,
-                            storage,
-                            slot.id,
-                            complicationProviderSparseArray.get(slot.id),
-                        )?.let { sanitizedData ->
-                            lastSanitizedData = sanitizedData
-                            (slot.complicationData as MutableStateFlow).value = sanitizedData
-                        }
-                    }
-                }
-            }
-        }
-
         private fun watchComplicationsColorChanges() {
             scope.launch {
                 storage.watchComplicationColors()
@@ -269,6 +246,30 @@ class PixelMinimalWatchFace : WatchFaceService() {
                             onGalaxyWatch4HeartRateComplicationRemoved()
                         }
                     }
+            }
+        }
+
+        private fun watchComplicationsDataChangesAndSanitize() {
+            complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
+                scope.launch {
+                    var lastSanitizedData: ComplicationData? = null
+                    slot.complicationData.collect { complicationData ->
+                        if (complicationData != lastSanitizedData) {
+                            rawComplicationDataSparseArray.put(slot.id, complicationData)
+                        }
+
+                        complicationData.sanitizeIfNeeded(
+                            context,
+                            storage,
+                            slot.id,
+                            complicationProviderSparseArray.get(slot.id),
+                        )?.let { sanitizedData ->
+                            lastSanitizedData = sanitizedData
+
+                            // TODO assign data to slot
+                        }
+                    }
+                }
             }
         }
 
