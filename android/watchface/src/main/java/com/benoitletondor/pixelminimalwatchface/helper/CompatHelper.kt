@@ -69,12 +69,12 @@ private val timeDateFormatter12h = SimpleDateFormat("h:mm", Locale.US)
 
 private var heartRateIcon: Icon? = null
 
-fun ComplicationData.sanitize(
+fun ComplicationData.sanitizeIfNeeded(
     context: Context,
     storage: Storage,
     watchFaceComplicationId: Int,
     providerInfo: ComplicationDataSourceInfo?,
-): ComplicationData {
+): ComplicationData? {
     try {
         if (!Device.isSamsungGalaxyWatch) {
             return this
@@ -145,11 +145,11 @@ fun ComplicationData.sanitize(
 
                 builder.build()
             }
-            else -> this
+            else -> null
         }
     } catch (t: Throwable) {
         Log.e("PixelWatchFace", "Error while sanitizing complication data", t)
-        return this
+        return null
     }
 }
 

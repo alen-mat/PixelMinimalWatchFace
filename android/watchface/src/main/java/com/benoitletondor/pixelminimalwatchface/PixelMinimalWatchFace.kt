@@ -25,8 +25,6 @@ import android.graphics.drawable.Drawable
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
-import android.support.wearable.complications.*
-import android.support.wearable.watchface.WatchFaceStyle
 import android.util.Log
 import android.util.SparseArray
 import android.view.SurfaceHolder
@@ -37,14 +35,13 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.wear.watchface.*
 import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import androidx.wear.watchface.complications.ComplicationDataSourceInfoRetriever
-import androidx.wear.watchface.complications.data.ComplicationType
+import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.style.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
-import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
@@ -59,7 +56,6 @@ import java.util.*
 import java.util.concurrent.Executors
 import kotlin.collections.HashSet
 import kotlin.math.max
-import kotlin.random.Random
 
 const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 private const val DATA_KEY_PREMIUM = "premium"
@@ -158,6 +154,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
         private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
         private val complicationProviderSparseArray: SparseArray<ComplicationDataSourceInfo> = SparseArray(ComplicationsSlots.COMPLICATION_IDS.size)
+        private val rawComplicationDataSparseArray: SparseArray<ComplicationData> = SparseArray(ComplicationsSlots.COMPLICATION_IDS.size)
 
         // TODO implement this
         private var lastGalaxyWatch4CalendarWidgetForcedRefreshTs: Long? = null
@@ -173,6 +170,30 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchComplicationsDataProviderChanges()
             watchComplicationsColorChanges()
             watchGalaxyWatch4HRComplications()
+            watchComplicationsDataChangesAndSanitize()
+        }
+
+        private fun watchComplicationsDataChangesAndSanitize() {
+            complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
+                scope.launch {
+                    var lastSanitizedData: ComplicationData? = null
+                    slot.complicationData.collect { complicationData ->
+                        if (complicationData != lastSanitizedData) {
+                            rawComplicationDataSparseArray.put(slot.id, complicationData)
+                        }
+
+                        complicationData.sanitizeIfNeeded(
+                            context,
+                            storage,
+                            slot.id,
+                            complicationProviderSparseArray.get(slot.id),
+                        )?.let { sanitizedData ->
+                            lastSanitizedData = sanitizedData
+                            (slot.complicationData as MutableStateFlow).value = sanitizedData
+                        }
+                    }
+                }
+            }
         }
 
         private fun watchComplicationsColorChanges() {
