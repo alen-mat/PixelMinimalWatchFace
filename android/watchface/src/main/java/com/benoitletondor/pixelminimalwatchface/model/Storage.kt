@@ -21,6 +21,8 @@ import androidx.annotation.ColorInt
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.helper.DEFAULT_TIME_SIZE
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 const val DEFAULT_APP_VERSION = -1
 
@@ -64,6 +66,7 @@ private const val KEY_WIDGETS_SIZE = "widgetSize"
 interface Storage {
     fun getComplicationColors(): ComplicationColors
     fun setComplicationColors(complicationColors: ComplicationColors)
+    fun watchComplicationColors(): StateFlow<ComplicationColors>
     fun isUserPremium(): Boolean
     fun setUserPremium(premium: Boolean)
     fun setUse24hTimeFormat(use: Boolean)
@@ -138,7 +141,7 @@ class StorageImpl(
     private val showPhoneBatteryCache = StorageCachedBoolValue(sharedPreferences, KEY_SHOW_PHONE_BATTERY, false)
     private val timeAndDateColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_TIME_AND_DATE_COLOR, R.color.white)
     private val batteryIndicatorColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_BATTERY_COLOR, R.color.white)
-    private var cacheComplicationsColor: ComplicationColors? = null
+    private val cacheComplicationsColorMutableFlow = MutableStateFlow(loadComplicationColors())
     private val useAndroid12StyleCache = StorageCachedBoolValue(sharedPreferences, KEY_USE_ANDROID_12_STYLE, false)
     private val hideBatteryInAmbientCache = StorageCachedBoolValue(sharedPreferences, KEY_HIDE_BATTERY_IN_AMBIENT, false)
     private val secondRingColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_SECONDS_RING_COLOR, R.color.white)
@@ -153,12 +156,7 @@ class StorageImpl(
         }
     }
 
-    override fun getComplicationColors(): ComplicationColors {
-        val cacheComplicationsColor = cacheComplicationsColor
-        if( cacheComplicationsColor != null ) {
-            return cacheComplicationsColor
-        }
-
+    private fun loadComplicationColors(): ComplicationColors {
         val baseColor = sharedPreferences.getInt(
             KEY_COMPLICATION_COLORS,
             DEFAULT_COMPLICATION_COLOR
@@ -217,12 +215,13 @@ class StorageImpl(
             if( android12BottomRightColor == DEFAULT_COMPLICATION_COLOR ) { defaultColors.android12BottomRightColor } else { ComplicationColor(android12BottomRightColor, ComplicationColorsProvider.getLabelForColor(appContext, android12BottomRightColor),false) },
         )
 
-        this.cacheComplicationsColor = colors
         return colors
     }
 
+    override fun getComplicationColors(): ComplicationColors = cacheComplicationsColorMutableFlow.value
+
     override fun setComplicationColors(complicationColors: ComplicationColors) {
-        cacheComplicationsColor = complicationColors
+        cacheComplicationsColorMutableFlow.value = complicationColors
         sharedPreferences.edit()
             .putInt(
                 KEY_LEFT_COMPLICATION_COLOR,
@@ -274,6 +273,8 @@ class StorageImpl(
             )
             .apply()
     }
+
+    override fun watchComplicationColors(): StateFlow<ComplicationColors> = cacheComplicationsColorMutableFlow
 
     override fun isUserPremium(): Boolean = isPremiumUserCache.get()
 

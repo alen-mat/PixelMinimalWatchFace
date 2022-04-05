@@ -20,8 +20,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.graphics.drawable.Icon
 import android.net.Uri
-import android.support.wearable.complications.ComplicationData
-import android.support.wearable.complications.ComplicationText
 import android.util.Log
 import com.benoitletondor.pixelminimalwatchface.Device
 import com.benoitletondor.pixelminimalwatchface.R
@@ -35,8 +33,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.support.wearable.complications.ComplicationProviderInfo
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
+import androidx.wear.watchface.complications.data.*
 import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import kotlinx.coroutines.CancellationException
@@ -74,7 +73,7 @@ fun ComplicationData.sanitize(
     context: Context,
     storage: Storage,
     watchFaceComplicationId: Int,
-    providerInfo: ComplicationProviderInfo?,
+    providerInfo: ComplicationDataSourceInfo?,
 ): ComplicationData {
     try {
         if (!Device.isSamsungGalaxyWatch) {
@@ -85,7 +84,7 @@ fun ComplicationData.sanitize(
             return this
         }
 
-        if (type == ComplicationData.TYPE_EMPTY) {
+        if (type == ComplicationType.EMPTY) {
             return this
         }
 
@@ -93,14 +92,14 @@ fun ComplicationData.sanitize(
             providerInfo.isSamsungHeartRateProvider() -> {
                 val shortText = context.getSamsungHeartRateData() ?: "?"
 
-                val builder = ComplicationData.Builder(ComplicationData.TYPE_SHORT_TEXT)
+                val icon = heartRateIcon ?: kotlin.run {
+                    val icon =  Icon.createWithResource(context, R.drawable.ic_heart_complication)
+                    heartRateIcon = icon
+                    icon
+                }
+                val builder = ShortTextComplicationData.Builder(PlainComplicationText.Builder(shortText).build(), ComplicationText.EMPTY)
                     .setTapAction(tapAction)
-                    .setShortText(ComplicationText.plainText(shortText))
-                    .setIcon(heartRateIcon ?: kotlin.run {
-                        val icon =  Icon.createWithResource(context, R.drawable.ic_heart_complication)
-                        heartRateIcon = icon
-                        icon
-                    })
+                    .setMonochromaticImage(MonochromaticImage.Builder(icon).setAmbientImage(icon).build())
                 builder.build()
             }
             providerInfo.isSamsungHealthBadComplicationData(context) -> {
@@ -154,7 +153,7 @@ fun ComplicationData.sanitize(
     }
 }
 
-private fun ComplicationProviderInfo.isSamsungHealthBadComplicationData(context: Context): Boolean {
+private fun ComplicationDataSourceInfo.isSamsungHealthBadComplicationData(context: Context): Boolean {
     val sHealthVersion = try {
         context.getShealthAppVersion()
     } catch (e: Throwable) {
@@ -171,30 +170,30 @@ private fun ComplicationProviderInfo.isSamsungHealthBadComplicationData(context:
     }
 }
 
-private fun ComplicationProviderInfo.isSamsungDailyActivityBuggyProvider(): Boolean {
-    return appName in samsungHealthAppNames && providerName in dailyActivityProviderNames
+private fun ComplicationDataSourceInfo.isSamsungDailyActivityBuggyProvider(): Boolean {
+    return appName in samsungHealthAppNames && name in dailyActivityProviderNames
 }
 
-fun ComplicationProviderInfo.isSamsungCalendarBuggyProvider(): Boolean {
+fun ComplicationDataSourceInfo.isSamsungCalendarBuggyProvider(): Boolean {
     return isGalaxyWatch4CalendarBuggyWearOSVersion
         && appName in oneUIWatchHomeAppNames
-        && providerName in calendarProviderNames
+        && name in calendarProviderNames
 }
 
-private fun ComplicationProviderInfo.isSamsungStepsProvider(): Boolean {
-    return appName in samsungHealthAppNames && providerName in stepsProviderNames
+private fun ComplicationDataSourceInfo.isSamsungStepsProvider(): Boolean {
+    return appName in samsungHealthAppNames && name in stepsProviderNames
 }
 
-private fun ComplicationProviderInfo.isSamsungSleepProvider(): Boolean {
-    return appName in samsungHealthAppNames && providerName in sleepProviderNames
+private fun ComplicationDataSourceInfo.isSamsungSleepProvider(): Boolean {
+    return appName in samsungHealthAppNames && name in sleepProviderNames
 }
 
-private fun ComplicationProviderInfo.isSamsungWaterSleepProvider(): Boolean {
-    return appName in samsungHealthAppNames && providerName in waterProviderNames
+private fun ComplicationDataSourceInfo.isSamsungWaterSleepProvider(): Boolean {
+    return appName in samsungHealthAppNames && name in waterProviderNames
 }
 
-fun ComplicationProviderInfo.isSamsungHeartRateProvider(): Boolean {
-    return appName in samsungHealthAppNames && providerName in heartRateProviderNames
+fun ComplicationDataSourceInfo.isSamsungHeartRateProvider(): Boolean {
+    return appName in samsungHealthAppNames && name in heartRateProviderNames
 }
 
 private fun Context.getShealthAppVersion(): Long {
