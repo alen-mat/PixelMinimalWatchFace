@@ -85,6 +85,8 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
     }
 
+    override fun onCr
+
     override fun onDestroy() {
         scope.cancel()
 
@@ -266,7 +268,12 @@ class PixelMinimalWatchFace : WatchFaceService() {
                         )?.let { sanitizedData ->
                             lastSanitizedData = sanitizedData
 
-                            // TODO assign data to slot
+                            ComplicationDataHelper.updateComplicationData(
+                                complicationSlotsManager,
+                                this@WatchFaceRenderer,
+                                slot.id,
+                                sanitizedData,
+                            )
                         }
                     }
                 }
