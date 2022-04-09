@@ -22,7 +22,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
-import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.databinding.ActivityPhoneBatteryConfigurationBinding
 import com.benoitletondor.pixelminimalwatchface.helper.await
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.troubleshoot.PhoneBatterySyncTroubleshootActivity
@@ -30,7 +29,6 @@ import com.google.android.gms.wearable.*
 import com.google.android.gms.wearable.CapabilityClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class PhoneBatteryConfigurationActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChangedListener {

@@ -15,54 +15,30 @@
  */
 package com.benoitletondor.pixelminimalwatchface
 
-import android.annotation.SuppressLint
 import android.app.*
 import android.content.*
-import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.graphics.Canvas
 import android.graphics.Rect
-import android.graphics.drawable.Drawable
-import android.os.BatteryManager
 import android.os.Build
-import android.os.Bundle
 import android.util.Log
-import android.util.SparseArray
 import android.view.SurfaceHolder
-import android.view.WindowInsets
 import android.widget.Toast
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.wear.watchface.*
-import androidx.wear.watchface.complications.ComplicationDataSourceInfo
-import androidx.wear.watchface.complications.ComplicationDataSourceInfoRetriever
-import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.style.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
-import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
 import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION
 import com.benoitletondor.pixelminimalwatchface.model.Storage
-import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
-import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.*
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.lang.ref.WeakReference
-import java.time.LocalDateTime
 import java.time.ZonedDateTime
-import java.util.*
-import java.util.concurrent.Executors
-import kotlin.collections.HashSet
-import kotlin.math.max
 
-const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 private const val DATA_KEY_PREMIUM = "premium"
 private const val DATA_KEY_BATTERY_STATUS_PERCENT = "/batterySync/batteryStatus"
 private const val THREE_DAYS_MS: Long = 1000 * 60 * 60 * 24 * 3L
-const val THIRTY_MINS_MS: Long = 1000 * 60 * 30L
-private const val MINIMUM_COMPLICATION_UPDATE_INTERVAL_MS = 1000L
 val DEBUG_LOGS = BuildConfig.DEBUG
 private const val TAG = "PixelMinimalWatchFace"
 
@@ -143,7 +119,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private val context: Context,
         surfaceHolder: SurfaceHolder,
         private val watchState: WatchState,
-        private val currentUserStyleRepository: CurrentUserStyleRepository,
+        currentUserStyleRepository: CurrentUserStyleRepository,
         canvasType: Int,
         private val storage: Storage,
         private val complicationsSlots: ComplicationsSlots,
@@ -184,26 +160,12 @@ class PixelMinimalWatchFace : WatchFaceService() {
             batteryWatchSyncHelper.start()
         }
 
-        private fun watchWeatherDataUpdates() {
-            scope.launch {
-                storage.watchShowWeather()
-                    .collect { showWeather ->
-                        complicationsSlots.setWeatherComplicationEnabled(showWeather)
-                    }
-            }
-
-            scope.launch {
-                complicationsSlots.weatherComplicationDataFlow
-                    .filterNotNull()
-                    .collect {
-                        invalidate()
-                    }
-            }
-        }
-
         override fun onDestroy() {
             batteryPhoneSyncHelper.stop()
             batteryWatchSyncHelper.stop()
+            watchFaceDrawer.onDestroy()
+            Wearable.getDataClient(context).removeListener(this)
+            Wearable.getMessageClient(context).removeListener(this)
             scope.cancel()
 
             super.onDestroy()
@@ -214,13 +176,23 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
 
         override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {
+            if (DEBUG_LOGS) Log.d(TAG, "render")
+
             showRatingNotificationIfNeeded()
 
-            watchFaceDrawer.render(
+            if (storage.isUserPremium()) {
+                if (storage.showComplicationsInAmbientMode() || watchState.isAmbient.value != true) {
+                    complicationsSlots.render(canvas, zonedDateTime, renderParameters)
+                }
+            }
+
+            watchFaceDrawer.draw(
                 canvas,
                 bounds,
                 zonedDateTime,
                 if (storage.showWeather()) { complicationsSlots.weatherComplicationDataFlow.value } else { null },
+                if (storage.showPhoneBattery()) { batteryPhoneSyncHelper.phoneBatteryStatus.getBatteryText(System.currentTimeMillis()) } else { null },
+                if (storage.showWatchBattery()) { batteryWatchSyncHelper.watchBatteryStatus.getValue() } else { null },
             )
         }
 
@@ -241,12 +213,11 @@ class PixelMinimalWatchFace : WatchFaceService() {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
 
             val drawer = if (useAndroid12Style) {
-                Android12DigitalWatchFaceDrawer(context, storage)
+                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots) // FIXME Android12DigitalWatchFaceDrawer(context, storage)
             } else {
-                RegularDigitalWatchFaceDrawer(context, storage)
+                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots)
             }
 
-            drawer.onCreate(context, watchState)
             complicationsSlots.setActiveComplicationLocations(drawer.getActiveComplicationLocations())
 
             return drawer
@@ -316,6 +287,23 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     .collect {
                         watchFaceDrawer.onDestroy()
                         watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
+                    }
+            }
+        }
+
+        private fun watchWeatherDataUpdates() {
+            scope.launch {
+                storage.watchShowWeather()
+                    .collect { showWeather ->
+                        complicationsSlots.setWeatherComplicationEnabled(showWeather)
+                    }
+            }
+
+            scope.launch {
+                complicationsSlots.weatherComplicationDataFlow
+                    .filterNotNull()
+                    .collect {
+                        invalidate()
                     }
             }
         }
@@ -421,7 +409,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
     }
 
-    override fun onCreateEngine(): Engine {
+    /*override fun onCreateEngine(): Engine {
         val storage = Injection.storage(this)
 
         // Set app version to the current one if not set yet (first launch)
@@ -1255,7 +1243,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 }
             }
         }
-    }
+    }*/
 
     companion object {
         private const val HALF_HOUR_MS: Long = 1000*60*30

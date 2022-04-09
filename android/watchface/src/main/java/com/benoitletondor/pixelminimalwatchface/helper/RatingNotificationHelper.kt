@@ -23,9 +23,10 @@ import android.content.Intent
 import android.service.wallpaper.WallpaperService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.benoitletondor.pixelminimalwatchface.MISC_NOTIFICATION_CHANNEL_ID
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
+
+const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 
 fun Context.showRatingNotification() {
     // Create notification channel if needed

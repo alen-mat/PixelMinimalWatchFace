@@ -15,19 +15,16 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
-import android.support.wearable.complications.ComplicationData
-import android.util.Log
 import androidx.core.content.ContextCompat
-import com.benoitletondor.pixelminimalwatchface.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.R
-import com.benoitletondor.pixelminimalwatchface.getBatteryText
 import com.benoitletondor.pixelminimalwatchface.helper.toBitmap
-import java.util.*
+import java.time.ZonedDateTime
 
 interface BatteryDrawer {
     fun drawBattery(
@@ -35,18 +32,16 @@ interface BatteryDrawer {
         batteryLevelPaint: Paint,
         batteryIconPaint: Paint,
         distanceBetweenPhoneAndWatchBattery: Int,
-        drawBattery: Boolean,
-        drawPhoneBattery: Boolean,
-        calendar: Calendar,
-        batteryComplicationData: ComplicationData?,
-        phoneBatteryStatus: PhoneBatteryStatus?,
+        date: ZonedDateTime,
+        watchBatteryValue: Int?,
+        phoneBatteryValue: String?,
     )
 
     fun tapIsOnBattery(x: Int, y: Int): Boolean
 }
 
 class BatteryDrawerImpl(
-    private val context: Context,
+    context: Context,
     private val centerX: Float,
     private val screenWidth: Int,
     private val batteryIconSize: Int,
@@ -63,43 +58,32 @@ class BatteryDrawerImpl(
     private val watchBatteryIcon: Bitmap = ContextCompat.getDrawable(context, R.drawable.ic_watch)!!.toBitmap(batteryIconSize, batteryIconSize)
     private val phoneBatteryIcon: Bitmap = ContextCompat.getDrawable(context, R.drawable.ic_phone)!!.toBitmap(batteryIconSize, batteryIconSize)
 
+    @SuppressLint("RestrictedApi")
     override fun drawBattery(
         canvas: Canvas,
         batteryLevelPaint: Paint,
         batteryIconPaint: Paint,
         distanceBetweenPhoneAndWatchBattery: Int,
-        drawBattery: Boolean,
-        drawPhoneBattery: Boolean,
-        calendar: Calendar,
-        batteryComplicationData: ComplicationData?,
-        phoneBatteryStatus: PhoneBatteryStatus?,
+        date: ZonedDateTime,
+        watchBatteryValue: Int?,
+        phoneBatteryValue: String?,
     ) {
-        val batteryText = if (drawBattery) {
-            batteryComplicationData?.shortText?.getText(context, calendar.timeInMillis)
-                ?.toString()?.filter { it.isDigit() }?.plus("%")
-        } else {
-            null
-        }
-        val phoneBatteryText = if (drawPhoneBattery) {
-            phoneBatteryStatus?.getBatteryText(calendar.timeInMillis)
-        } else {
-            null
-        }
+        val batteryText = watchBatteryValue?.toString()?.filter { it.isDigit() }?.plus("%")
 
-        if (phoneBatteryText != null || batteryText != null) {
+        if (phoneBatteryValue != null || batteryText != null) {
             val batteryTextLength = if (batteryText != null) {
                 batteryLevelPaint.measureText(batteryText)
             } else {
                 0f
             }
-            val phoneBatteryTextLength = if (phoneBatteryText != null) {
-                batteryLevelPaint.measureText(phoneBatteryText)
+            val phoneBatteryTextLength = if (phoneBatteryValue != null) {
+                batteryLevelPaint.measureText(phoneBatteryValue)
             } else {
                 0f
             }
 
             var numberOfIcons = 0
-            if (phoneBatteryText != null) {
+            if (phoneBatteryValue != null) {
                 numberOfIcons++
             }
             if (batteryText != null) {
@@ -112,7 +96,7 @@ class BatteryDrawerImpl(
             }
 
             if (batteryText != null) {
-                val icon = if (phoneBatteryText == null ) { getBatteryIcon(batteryText) } else { watchBatteryIcon }
+                val icon = if (phoneBatteryValue == null ) { getBatteryIcon(watchBatteryValue) } else { watchBatteryIcon }
 
                 canvas.drawBitmap(
                     icon,
@@ -138,7 +122,7 @@ class BatteryDrawerImpl(
                 left+=batteryTextLength
             }
 
-            if (phoneBatteryText != null) {
+            if (phoneBatteryValue != null) {
                 if (batteryText != null) {
                     left += distanceBetweenPhoneAndWatchBattery
                 }
@@ -158,7 +142,7 @@ class BatteryDrawerImpl(
                 left+=batteryIconSize
 
                 canvas.drawText(
-                    phoneBatteryText,
+                    phoneBatteryValue,
                     left,
                     (batteryLevelBottomY).toFloat(),
                     batteryLevelPaint
@@ -178,14 +162,7 @@ class BatteryDrawerImpl(
         return batteryIndicatorRect.contains(x, y)
     }
 
-    private fun getBatteryIcon(batteryText: String): Bitmap {
-        val batteryPercent = try {
-            Integer.parseInt(batteryText.replace("%", ""))
-        } catch (t: Throwable) {
-            Log.e("WatchFaceDrawer", "Error parsing battery data", t)
-            50
-        }
-
+    private fun getBatteryIcon(batteryPercent: Int): Bitmap {
         return when {
             batteryPercent <= 10 -> { battery10Icon }
             batteryPercent <= 25 -> { battery20Icon }

@@ -26,6 +26,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.benoitletondor.pixelminimalwatchface.helper.MISC_NOTIFICATION_CHANNEL_ID
 
 class AppUpdateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {

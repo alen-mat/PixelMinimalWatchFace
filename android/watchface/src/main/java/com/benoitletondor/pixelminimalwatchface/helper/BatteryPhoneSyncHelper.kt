@@ -19,7 +19,6 @@ import android.content.Context
 import android.util.Log
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
 import com.benoitletondor.pixelminimalwatchface.PhoneBatteryStatus
-import com.benoitletondor.pixelminimalwatchface.THIRTY_MINS_MS
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.findBestNode
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.startPhoneBatterySync
@@ -100,5 +99,9 @@ class BatteryPhoneSyncHelper(
             if (t is CancellationException) throw t
             Log.e("PixelWatchFace", "Error while sending phone battery sync signal", t)
         }
+    }
+
+    companion object {
+        private const val THIRTY_MINS_MS: Long = 1000 * 60 * 30L
     }
 }

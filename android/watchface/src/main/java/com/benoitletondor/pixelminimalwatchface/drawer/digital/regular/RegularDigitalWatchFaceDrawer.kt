@@ -19,30 +19,30 @@ import android.content.Context
 import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.support.wearable.complications.ComplicationData
-import android.support.wearable.complications.rendering.ComplicationDrawable
-import android.support.wearable.complications.rendering.CustomComplicationDrawable
 import android.util.Log
 import android.util.SparseArray
 import android.view.WindowInsets
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
-import com.benoitletondor.pixelminimalwatchface.DEBUG_LOGS
-import com.benoitletondor.pixelminimalwatchface.PhoneBatteryStatus
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace
-import com.benoitletondor.pixelminimalwatchface.R
+import androidx.wear.watchface.WatchState
+import com.benoitletondor.pixelminimalwatchface.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplicationId
 import java.text.SimpleDateFormat
+import java.time.ZonedDateTime
 import java.util.*
 import kotlin.math.*
 
 class RegularDigitalWatchFaceDrawer(
     private val context: Context,
     private val storage: Storage,
+    private val watchState: WatchState,
+    private val complicationsSlots: ComplicationsSlots,
 ) : WatchFaceDrawer {
     private var drawingState: RegularDrawerDrawingState = RegularDrawerDrawingState.NoScreenData
 
@@ -79,8 +79,6 @@ class RegularDigitalWatchFaceDrawer(
     private val distanceBetweenPhoneAndWatchBattery: Int = context.dpToPx(3)
     private val titleSize: Int = context.resources.getDimensionPixelSize(R.dimen.complication_title_size)
     private val textSize: Int = context.resources.getDimensionPixelSize(R.dimen.complication_text_size)
-    private var chinSize: Int = 0
-    private var isRound: Boolean = false
     private val timeFormatter24H = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val timeFormatter12H = SimpleDateFormat("h:mm", Locale.getDefault())
     private var currentTimeSize = storage.getTimeSize()
@@ -90,6 +88,297 @@ class RegularDigitalWatchFaceDrawer(
     private val topAndBottomMargins = context.getTopAndBottomMargins().toInt()
     private val weatherAndBatteryIconColorFilterDimmed: ColorFilter = PorterDuffColorFilter(dateAndBatteryColorDimmed, PorterDuff.Mode.SRC_IN)
 
+    init {
+
+    }
+
+    override fun onDestroy() {
+
+    }
+
+    override fun getActiveComplicationLocations(): Set<ComplicationLocation> = setOf(
+        ComplicationLocation.LEFT,
+        ComplicationLocation.MIDDLE,
+        ComplicationLocation.RIGHT,
+        ComplicationLocation.BOTTOM,
+    )
+
+    override fun draw(
+        canvas: Canvas,
+        bounds: Rect,
+        zonedDateTime: ZonedDateTime,
+        weatherComplicationData: ComplicationData?,
+        phoneBatteryValue: String?,
+        watchBatteryValue: Int?,
+    ) {
+        val isAmbient = watchState.isAmbient.value == true
+        setPaintVariables(
+            ambient = isAmbient,
+            lowBitAmbient = watchState.hasLowBitAmbient,
+        )
+
+        canvas.drawColor(backgroundColor)
+
+        val currentDrawingState = drawingState
+        if( currentDrawingState is RegularDrawerDrawingState.NoCacheAvailable ) {
+            drawingState = currentDrawingState.buildCache()
+        } else if( currentDrawingState is RegularDrawerDrawingState.CacheAvailable &&
+            (currentTimeSize != storage.getTimeSize() ||
+                    currentDateAndBatterySize != storage.getDateAndBatterySize() ||
+                    currentWidgetsSize != storage.getWidgetsSize()) ) {
+            drawingState = currentDrawingState.buildCache()
+        }
+
+        val drawingState = drawingState
+        if(drawingState is RegularDrawerDrawingState.CacheAvailable){
+            drawingState.draw(
+                canvas,
+                zonedDateTime,
+                watchState.isAmbient.value == true,
+                storage.isUserPremium(),
+                storage.showSecondsRing(),
+                !isAmbient || storage.getShowDateInAmbient(),
+                weatherComplicationData,
+                watchBatteryValue,
+                phoneBatteryValue,
+            )
+        }
+    }
+
+    private fun setPaintVariables(
+        ambient:Boolean,
+        lowBitAmbient: Boolean,
+    ) {
+        wearOSLogoPaint.isAntiAlias = !ambient
+
+        val shouldUseStrokeStyle = (ambient && !storage.useNormalTimeStyleInAmbientMode()) || (!ambient && storage.useThinTimeStyleInRegularMode())
+        timePaint.apply {
+            isAntiAlias = !(ambient && lowBitAmbient)
+            style = if(shouldUseStrokeStyle) { Paint.Style.STROKE } else { Paint.Style.FILL }
+            color = if( ambient ) { timeColorDimmed } else { storage.getTimeAndDateColor() }
+        }
+
+        datePaint.apply {
+            isAntiAlias = !(ambient && lowBitAmbient)
+            color = if( ambient ) { dateAndBatteryColorDimmed } else { storage.getTimeAndDateColor() }
+        }
+
+        weatherIconPaint.apply {
+            isAntiAlias = !ambient
+            colorFilter = if( ambient ) { weatherAndBatteryIconColorFilterDimmed } else { storage.getTimeAndDateColorFilter() }
+        }
+
+        batteryLevelPaint.apply {
+            isAntiAlias = !(ambient && lowBitAmbient)
+            color = if( ambient ) { dateAndBatteryColorDimmed } else { storage.getBatteryIndicatorColor() }
+        }
+
+        batteryIconPaint.apply {
+            isAntiAlias = !(ambient && lowBitAmbient)
+            colorFilter = if( ambient ) { weatherAndBatteryIconColorFilterDimmed } else { storage.getBatteryIndicatorColorFilter() }
+        }
+
+        secondsRingPaint.apply {
+            colorFilter = storage.getSecondRingColor()
+        }
+    }
+
+    private fun RegularDrawerDrawingState.NoCacheAvailable.buildCache(): RegularDrawerDrawingState.CacheAvailable {
+        val timeSize = storage.getTimeSize()
+        val dateAndBatterySize = storage.getDateAndBatterySize()
+        setScaledSizes(timeSize, dateAndBatterySize)
+
+        val timeText = "22:13"
+        val timeTextBounds = Rect().apply {
+            timePaint.getTextBounds(timeText, 0, timeText.length, this)
+        }
+        val timeYOffset = centerY + (timeTextBounds.height() / 2.0f ) - 5f
+
+        val dateText = "May, 15"
+        val dateTextHeight = Rect().apply {
+            datePaint.getTextBounds(dateText, 0, dateText.length, this)
+        }.height()
+        val dateYOffset = timeYOffset + (timeTextBounds.height() / 2) - (dateTextHeight / 2.0f ) + context.dpToPx(8)
+
+        val complicationsDrawingCache = buildComplicationDrawingCache(
+            timeYOffset - timeTextBounds.height(),
+            dateYOffset + dateTextHeight / 2,
+        )
+
+        currentTimeSize = timeSize
+        currentDateAndBatterySize = dateAndBatterySize
+
+        val batteryBottomY = screenHeight - watchState.chinHeight - topAndBottomMargins
+
+        return RegularDrawerDrawingState.CacheAvailable(
+            context,
+            batteryIconSize,
+            batteryBottomY,
+            batteryBottomY + context.dpToPx(1),
+            dateTextHeight,
+            dateYOffset,
+            screenWidth,
+            screenHeight,
+            centerX,
+            centerY,
+            timeYOffset,
+            complicationsDrawingCache,
+        )
+    }
+
+    private fun RegularDrawerDrawingState.NoCacheAvailable.buildComplicationDrawingCache(
+        topBottom: Float,
+        bottomTop: Float,
+    ): ComplicationsDrawingCache {
+        val wearOsImage = wearOSLogo
+
+        currentWidgetsSize = storage.getWidgetsSize()
+        val widgetsScaleFactor = fontDisplaySizeToScaleFactor(currentWidgetsSize, android12Layout = false)
+
+        val sizeOfComplication = if(context.resources.configuration.isScreenRound) { ((screenWidth / 4.5) * widgetsScaleFactor).toInt() } else { (min(topBottom.toInt() - topAndBottomMargins - context.dpToPx(2), (screenWidth / 3.5).toInt()) * widgetsScaleFactor).toInt() }
+        // If watch is round, align top widgets with the top of the time, otherwise center them in the top space
+        val verticalOffset = if (context.resources.configuration.isScreenRound) { topBottom.toInt() - sizeOfComplication - context.dpToPx(6) } else { topAndBottomMargins + ((topBottom.toInt() - topAndBottomMargins) / 2) - (sizeOfComplication / 2) }
+        val distanceBetweenComplications = context.dpToPx(3)
+
+        val maxWidth = max(sizeOfComplication, wearOsImage.width)
+
+        // TODO convert bounds to complication bounds
+
+        val leftBounds = Rect(
+            (centerX - (maxWidth / 2) - distanceBetweenComplications - sizeOfComplication).toInt(),
+            verticalOffset,
+            (centerX - (maxWidth / 2)  - distanceBetweenComplications).toInt(),
+            (verticalOffset + sizeOfComplication)
+        )
+
+        val middleBounds = Rect(
+            (centerX - (sizeOfComplication / 2)).toInt(),
+            verticalOffset,
+            (centerX + (sizeOfComplication / 2)).toInt(),
+            (verticalOffset + sizeOfComplication)
+        )
+
+        val rightBounds = Rect(
+            (centerX + (maxWidth / 2) + distanceBetweenComplications).toInt(),
+            verticalOffset,
+            (centerX + (maxWidth / 2)  + distanceBetweenComplications + sizeOfComplication).toInt(),
+            (verticalOffset + sizeOfComplication)
+        )
+
+        val availableBottomSpace = screenHeight - bottomTop - watchState.chinHeight - topAndBottomMargins
+        val bottomComplicationHeight = min(availableBottomSpace, context.dpToPx(36).toFloat())
+        val bottomComplicationTop = if(context.resources.configuration.isScreenRound) { bottomTop.toInt() + context.dpToPx(5) } else { (bottomTop + + context.dpToPx(5) + availableBottomSpace - bottomComplicationHeight).toInt() }
+        val bottomComplicationBottom = if(context.resources.configuration.isScreenRound) { (bottomTop + bottomComplicationHeight).toInt() } else { (bottomTop + availableBottomSpace).toInt() }
+        val bottomComplicationLeft = computeComplicationLeft(bottomComplicationBottom, screenHeight)
+        val bottomComplicationWidth = (screenWidth - 2* bottomComplicationLeft) * 0.9
+        val bottomBounds = Rect(
+            (centerX - (bottomComplicationWidth / 2)).toInt(),
+            bottomComplicationTop,
+            (centerX + (bottomComplicationWidth / 2)).toInt(),
+            bottomComplicationBottom
+        )
+
+        val iconXOffset = centerX - (wearOsImage.width / 2.0f)
+        val iconYOffset = leftBounds.top + (leftBounds.height() / 2) - (wearOsImage.height / 2)
+
+        return ComplicationsDrawingCache(
+            iconXOffset,
+            iconYOffset.toFloat()
+        )
+    }
+
+    private fun computeComplicationLeft(bottomY: Int, screenHeight: Int): Int {
+        return if(context.resources.configuration.isScreenRound) {
+            screenHeight / 2 - sqrt((screenHeight / 2).toDouble().pow(2) - ((bottomY - (screenHeight / 2)).toDouble().pow(2))).toInt()
+        } else {
+            context.dpToPx(10)
+        }
+    }
+
+    private fun RegularDrawerDrawingState.CacheAvailable.draw(
+        canvas: Canvas,
+        date: ZonedDateTime,
+        ambient:Boolean,
+        isUserPremium: Boolean,
+        drawSecondsRing: Boolean,
+        drawDate: Boolean,
+        weatherComplicationData: ComplicationData?,
+        watchBatteryValue: Int?,
+        phoneBatteryValue: String?,
+    ) {
+        val timeText = if( storage.getUse24hTimeFormat()) {
+            timeFormatter24H.format(date)
+        } else {
+            timeFormatter12H.format(date)
+        }
+        val timeXOffset = centerX - (timePaint.measureText(timeText) / 2f)
+        canvas.drawText(timeText, timeXOffset, timeYOffset, timePaint)
+
+        if( storage.showWearOSLogo() ) {
+            val wearOsImage = if( ambient ) { wearOSLogoAmbient } else { wearOSLogo }
+            canvas.drawBitmap(wearOsImage, complicationsDrawingCache.iconXOffset, complicationsDrawingCache.iconYOffset, wearOSLogoPaint)
+        }
+
+        if( drawDate ) {
+            drawDateAndWeather(
+                canvas,
+                weatherComplicationData,
+                storage.getUseShortDateFormat(),
+                isUserPremium,
+                date,
+                datePaint,
+                spaceBeforeWeather,
+                weatherIconPaint,
+            )
+        }
+
+        if( drawSecondsRing && !ambient ) {
+            drawSecondRing(canvas, date, secondsRingPaint)
+        }
+
+        if( isUserPremium && (watchBatteryValue != null || phoneBatteryValue != null) && (!ambient || !storage.hideBatteryInAmbient()) ) {
+            drawBattery(
+                canvas,
+                batteryLevelPaint,
+                batteryIconPaint,
+                distanceBetweenPhoneAndWatchBattery,
+                date,
+                watchBatteryValue,
+                phoneBatteryValue,
+            )
+        }
+    }
+
+    private fun RegularDrawerDrawingState.CacheAvailable.buildCache(): RegularDrawerDrawingState.CacheAvailable {
+        return RegularDrawerDrawingState.NoCacheAvailable(screenWidth, screenHeight, centerX, centerY).buildCache()
+    }
+
+    private fun setScaledSizes(timeSize: Int, dateAndBatterySize: Int) {
+        val timeScaleFactor = fontDisplaySizeToScaleFactor(timeSize, android12Layout = false)
+        val dateAndBatteryScaleFactor = fontDisplaySizeToScaleFactor(dateAndBatterySize, android12Layout = false)
+
+        timePaint.textSize = context.resources.getDimension(
+            if(context.resources.configuration.isScreenRound) {
+                R.dimen.time_text_size_round
+            } else {
+                R.dimen.time_text_size
+            }
+        ) * timeScaleFactor
+
+        val dateSize = context.resources.getDimension(
+            if(context.resources.configuration.isScreenRound) {
+                R.dimen.date_text_size_round
+            } else {
+                R.dimen.date_text_size
+            }
+        ) * dateAndBatteryScaleFactor
+
+        datePaint.textSize = dateSize
+        batteryLevelPaint.textSize = context.resources.getDimension(R.dimen.battery_level_size) * dateAndBatteryScaleFactor
+        batteryIconSize = (context.resources.getDimension(R.dimen.battery_icon_size) * dateAndBatteryScaleFactor).toInt()
+    }
+
+    /*
     private val complicationDrawableSparseArray: SparseArray<ComplicationDrawable> = SparseArray(ACTIVE_COMPLICATIONS.size)
 
     override fun initializeComplicationDrawables(drawableCallback: Drawable.Callback): IntArray {
@@ -567,4 +856,7 @@ class RegularDigitalWatchFaceDrawer(
 
         private const val TAG = "PixelMinimalWatchFace/RegularDrawer"
     }
+
+
+     */
 }

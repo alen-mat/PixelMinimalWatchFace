@@ -18,6 +18,7 @@ package com.benoitletondor.pixelminimalwatchface
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.RectF
 import android.util.Log
 import android.util.SparseArray
@@ -26,6 +27,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.wear.watchface.CanvasComplicationFactory
 import androidx.wear.watchface.ComplicationSlot
 import androidx.wear.watchface.ComplicationSlotsManager
+import androidx.wear.watchface.RenderParameters
 import androidx.wear.watchface.complications.ComplicationSlotBounds
 import androidx.wear.watchface.complications.DefaultComplicationDataSourcePolicy
 import androidx.wear.watchface.complications.SystemDataSources
@@ -50,6 +52,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.time.ZonedDateTime
 
 class ComplicationsSlots(
     private val context: Context,
@@ -287,6 +290,20 @@ class ComplicationsSlots(
         }
     }
 
+    fun render(canvas: Canvas, zonedDateTime: ZonedDateTime, rendererParameters: RenderParameters) {
+        for ((_, slot) in complicationSlotsManager.complicationSlots) {
+            val slotLocation = slot.id.toComplicationLocation()
+
+            if (slotLocation != null && slotLocation in activeSlots) {
+                if (slotLocation == ComplicationLocation.MIDDLE && storage.showWearOSLogo()) {
+                    continue
+                }
+
+                slot.render(canvas, zonedDateTime, rendererParameters)
+            }
+        }
+    }
+
     private fun watchComplicationSlotsData() {
         activeComplicationWatchingJobs.forEach { it.cancel() }
         activeComplicationWatchingJobs.clear()
@@ -313,7 +330,7 @@ class ComplicationsSlots(
                         complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                             context,
                             storage,
-                            slot.id,
+                            location,
                             complicationData.dataSource,
                         )?.let { sanitizedData ->
                             lastSanitizedData = sanitizedData

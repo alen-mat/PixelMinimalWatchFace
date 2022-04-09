@@ -41,3 +41,8 @@ sealed class WatchBatteryStatus {
         }
     }
 }
+
+fun WatchBatteryStatus.getValue(): Int? = when(this) {
+    is WatchBatteryStatus.DataReceived -> batteryPercentage
+    WatchBatteryStatus.Unknown -> null
+}

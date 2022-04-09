@@ -16,14 +16,13 @@
 package com.benoitletondor.pixelminimalwatchface.drawer.digital
 
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
-import java.util.*
+import java.time.ZonedDateTime
 
 interface SecondsRingDrawer {
     fun drawSecondRing(
         canvas: Canvas,
-        calendar: Calendar,
+        date: ZonedDateTime,
         paint: Paint,
     )
 }
@@ -34,10 +33,10 @@ class SecondRingDrawerImpl(
 ) : SecondsRingDrawer {
     override fun drawSecondRing(
         canvas: Canvas,
-        calendar: Calendar,
+        date: ZonedDateTime,
         paint: Paint,
     ) {
-        val endAngle = (calendar.get(Calendar.SECOND) * 6).toFloat()
+        val endAngle = (date.second * 6).toFloat()
         canvas.drawArc(0F, 0F, screenWidth.toFloat(), screenHeight.toFloat(), 270F, endAngle, false, paint)
     }
 }

@@ -34,18 +34,15 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.pm.PackageInfoCompat
-import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import androidx.wear.watchface.complications.data.*
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
-import kotlinx.coroutines.channels.sendBlocking
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.flow
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -70,11 +67,13 @@ private val timeDateFormatter24h = SimpleDateFormat("HH:mm", Locale.US)
 private val timeDateFormatter12h = SimpleDateFormat("h:mm", Locale.US)
 
 private var heartRateIcon: Icon? = null
+private var calendarIcon: Icon? = null
 
+@SuppressLint("RestrictedApi")
 fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
     context: Context,
     storage: Storage,
-    watchFaceComplicationId: Int,
+    complicationLocation: ComplicationLocation,
     dataSource: ComponentName?,
 ): ComplicationData? {
     try {
@@ -105,7 +104,7 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                 builder.build()
             }
             dataSource.isSamsungHealthBadComplicationData(context) -> {
-                ComplicationData.Builder(this)
+                android.support.wearable.complications.ComplicationData.Builder(this.asWireComplicationData())
                     .setTapAction(
                         PendingIntent.getActivity(
                             context,
@@ -117,24 +116,32 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                         )
                     )
                     .build()
+                    .toApiComplicationData()
             }
             dataSource.isSamsungCalendarBuggyProvider() -> {
                 val nextEvent = context.getNextCalendarEvent() ?: return this
-                val isLargeWidget = PixelMinimalWatchFace.BOTTOM_COMPLICATION_ID == watchFaceComplicationId
+                val isLargeWidget = complicationLocation == ComplicationLocation.BOTTOM
 
-                val builder = ComplicationData.Builder(if (isLargeWidget) { ComplicationData.TYPE_LONG_TEXT } else { ComplicationData.TYPE_SHORT_TEXT })
-                    .setTapAction(PendingIntent.getActivity(
-                        context,
-                        0,
-                        Intent().apply {
-                            component = getSamsungCalendarHomeComponentName()
-                        },
-                        PendingIntent.FLAG_IMMUTABLE,
-                    ))
-                    .setIcon(Icon.createWithResource(context, R.drawable.ic_calendar_complication))
+                val icon = calendarIcon ?: kotlin.run {
+                    val icon = Icon.createWithResource(context, R.drawable.ic_calendar_complication)
+                    calendarIcon = icon
+                    icon
+                }
+
+                val openCalendarIntent = PendingIntent.getActivity(
+                    context,
+                    0,
+                    Intent().apply {
+                        component = getSamsungCalendarHomeComponentName()
+                    },
+                    PendingIntent.FLAG_IMMUTABLE,
+                )
 
                 if (isLargeWidget) {
-                    builder.setLongText(ComplicationText.plainText(nextEvent.title))
+                    LongTextComplicationData.Builder(PlainComplicationText.Builder(nextEvent.title).build(), ComplicationText.EMPTY)
+                        .setTapAction(openCalendarIntent)
+                        .setMonochromaticImage(MonochromaticImage.Builder(icon).setAmbientImage(icon).build())
+                        .build()
                 } else {
                     val eventDate = Date(nextEvent.startTimestamp)
                     val formattedTime = if (storage.getUse24hTimeFormat()) {
@@ -142,10 +149,12 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                     } else {
                         timeDateFormatter12h.format(eventDate)
                     }
-                    builder.setShortText(ComplicationText.plainText(formattedTime))
-                }
 
-                builder.build()
+                    ShortTextComplicationData.Builder(PlainComplicationText.Builder(formattedTime).build(), ComplicationText.EMPTY)
+                        .setTapAction(openCalendarIntent)
+                        .setMonochromaticImage(MonochromaticImage.Builder(icon).setAmbientImage(icon).build())
+                        .build()
+                }
             }
             else -> null
         }
@@ -166,7 +175,7 @@ private fun ComponentName.isSamsungHealthBadComplicationData(context: Context): 
         sHealthVersion == S_HEALTH_6_20_0_016  -> isSamsungDailyActivityBuggyProvider() ||
             isSamsungStepsProvider() ||
             isSamsungSleepProvider() ||
-            isSamsungWaterSleepProvider()
+            isSamsungWaterProvider()
         sHealthVersion >= S_HEALTH_6_21_0_051 -> isSamsungDailyActivityBuggyProvider()
         else -> false
     }
@@ -193,7 +202,7 @@ private fun ComponentName.isSamsungSleepProvider(): Boolean {
         className == "com.samsung.android.wear.shealth.complications.sleep.SleepComplicationProviderService"
 }
 
-private fun ComponentName.isSamsungWaterSleepProvider(): Boolean {
+private fun ComponentName.isSamsungWaterProvider(): Boolean {
     return packageName == S_HEALTH_PACKAGE_NAME &&
         className == "com.samsung.android.wear.shealth.complications.water.WaterComplicationProviderService"
 }
@@ -204,7 +213,7 @@ fun ComponentName.isSamsungHeartRateProvider(): Boolean {
 }
 
 private fun Context.getShealthAppVersion(): Long {
-    val packageInfo = packageManager.getPackageInfo(S_HEALTH_PACKAGE_NAME, 0);
+    val packageInfo = packageManager.getPackageInfo(S_HEALTH_PACKAGE_NAME, 0)
     return PackageInfoCompat.getLongVersionCode(packageInfo)
 }
 
