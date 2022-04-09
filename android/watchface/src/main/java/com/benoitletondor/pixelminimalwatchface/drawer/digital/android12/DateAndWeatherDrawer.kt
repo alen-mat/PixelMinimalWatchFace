@@ -15,6 +15,7 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital.android12
 
+/*
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -166,3 +167,5 @@ class DateAndWeatherDrawerImpl(
         weatherTextEndX = weatherTextX + weatherTextLength
     }
 }
+
+ */

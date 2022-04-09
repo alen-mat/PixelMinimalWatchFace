@@ -26,7 +26,6 @@ import android.widget.Toast
 import androidx.wear.watchface.*
 import androidx.wear.watchface.style.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
-import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION

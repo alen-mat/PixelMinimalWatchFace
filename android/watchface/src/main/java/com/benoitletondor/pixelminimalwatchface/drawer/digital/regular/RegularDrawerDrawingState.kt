@@ -19,7 +19,6 @@ import android.content.Context
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.*
 
 sealed class RegularDrawerDrawingState {
-    object NoScreenData : RegularDrawerDrawingState()
     data class NoCacheAvailable(
         val screenWidth: Int,
         val screenHeight: Int,

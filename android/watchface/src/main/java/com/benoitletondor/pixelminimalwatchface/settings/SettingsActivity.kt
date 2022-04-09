@@ -21,8 +21,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.ResultReceiver
-import android.support.wearable.phone.PhoneDeviceType
-import android.support.wearable.view.ConfirmationOverlay
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
@@ -36,7 +34,6 @@ import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
-import com.google.android.wearable.intent.RemoteIntent
 
 class SettingsActivity : Activity() {
     private lateinit var adapter: ComplicationConfigRecyclerViewAdapter

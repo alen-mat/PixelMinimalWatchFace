@@ -18,7 +18,6 @@ package com.benoitletondor.pixelminimalwatchface.model
 import android.os.Parcel
 import android.os.Parcelable
 import androidx.annotation.ColorInt
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace
 
 data class ComplicationColors(
     val leftColor: ComplicationColor,
@@ -64,14 +63,13 @@ data class ComplicationColor(
 }
 
 @ColorInt
-fun ComplicationColors.getPrimaryColorForComplicationId(complicationId: Int): Int = when (complicationId) {
-    PixelMinimalWatchFace.LEFT_COMPLICATION_ID -> { leftColor.color }
-    PixelMinimalWatchFace.MIDDLE_COMPLICATION_ID -> { middleColor.color }
-    PixelMinimalWatchFace.BOTTOM_COMPLICATION_ID -> { bottomColor.color }
-    PixelMinimalWatchFace.RIGHT_COMPLICATION_ID -> { rightColor.color }
-    PixelMinimalWatchFace.ANDROID_12_TOP_LEFT_COMPLICATION_ID -> { android12TopLeftColor.color }
-    PixelMinimalWatchFace.ANDROID_12_TOP_RIGHT_COMPLICATION_ID -> { android12TopRightColor.color }
-    PixelMinimalWatchFace.ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID -> { android12BottomLeftColor.color }
-    PixelMinimalWatchFace.ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID -> { android12BottomRightColor.color }
-    else -> { rightColor.color }
+fun ComplicationColors.getPrimaryColorForComplication(complicationLocation: ComplicationLocation): Int = when (complicationLocation) {
+    ComplicationLocation.LEFT -> { leftColor.color }
+    ComplicationLocation.MIDDLE -> { middleColor.color }
+    ComplicationLocation.BOTTOM -> { bottomColor.color }
+    ComplicationLocation.RIGHT -> { rightColor.color }
+    ComplicationLocation.ANDROID_12_TOP_LEFT -> { android12TopLeftColor.color }
+    ComplicationLocation.ANDROID_12_TOP_RIGHT -> { android12TopRightColor.color }
+    ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> { android12BottomLeftColor.color }
+    ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> { android12BottomRightColor.color }
 }

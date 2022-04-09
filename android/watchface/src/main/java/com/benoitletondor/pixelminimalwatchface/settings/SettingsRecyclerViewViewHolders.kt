@@ -17,12 +17,14 @@ package com.benoitletondor.pixelminimalwatchface.settings
 
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
 import android.support.wearable.complications.ComplicationProviderInfo
 import android.view.View
 import android.widget.*
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.helper.fontDisplaySizeToHumanReadableString
@@ -85,13 +87,13 @@ class RegularComplicationsViewHolder(
 
     fun updateComplicationViews(
         location: ComplicationLocation,
-        complicationProviderInfo: ComplicationProviderInfo?,
+        providerIcon: Icon?,
         complicationColors: ComplicationColors,
     ) {
         when (location) {
             ComplicationLocation.LEFT -> {
                 updateComplicationView(
-                    complicationProviderInfo,
+                    providerIcon,
                     leftComplication,
                     leftComplicationBackground,
                     complicationColors
@@ -99,7 +101,7 @@ class RegularComplicationsViewHolder(
             }
             ComplicationLocation.MIDDLE -> {
                 updateComplicationView(
-                    complicationProviderInfo,
+                    providerIcon,
                     middleComplication,
                     middleComplicationBackground,
                     complicationColors
@@ -107,7 +109,7 @@ class RegularComplicationsViewHolder(
             }
             ComplicationLocation.RIGHT -> {
                 updateComplicationView(
-                    complicationProviderInfo,
+                    providerIcon,
                     rightComplication,
                     rightComplicationBackground,
                     complicationColors
@@ -115,7 +117,7 @@ class RegularComplicationsViewHolder(
             }
             ComplicationLocation.BOTTOM -> {
                 updateComplicationView(
-                    complicationProviderInfo,
+                    providerIcon,
                     bottomComplication,
                     bottomComplicationBackground,
                     complicationColors
@@ -126,13 +128,13 @@ class RegularComplicationsViewHolder(
     }
 
     private fun updateComplicationView(
-        complicationProviderInfo: ComplicationProviderInfo?,
+        providerIcon: Icon?,
         button: ImageButton,
         background: ImageView,
         complicationColors: ComplicationColors,
     ) {
-        if (complicationProviderInfo != null) {
-            button.setImageIcon(complicationProviderInfo.providerIcon)
+        if (providerIcon != null) {
+            button.setImageIcon(providerIcon)
             background.setImageDrawable(addedComplicationDrawable)
         } else {
             button.setImageIcon(null)

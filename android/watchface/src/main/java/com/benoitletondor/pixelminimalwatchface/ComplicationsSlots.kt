@@ -18,19 +18,15 @@ package com.benoitletondor.pixelminimalwatchface
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.RectF
 import android.util.Log
 import android.util.SparseArray
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
-import androidx.wear.watchface.CanvasComplicationFactory
-import androidx.wear.watchface.ComplicationSlot
-import androidx.wear.watchface.ComplicationSlotsManager
-import androidx.wear.watchface.RenderParameters
-import androidx.wear.watchface.complications.ComplicationSlotBounds
-import androidx.wear.watchface.complications.DefaultComplicationDataSourcePolicy
-import androidx.wear.watchface.complications.SystemDataSources
+import androidx.wear.watchface.*
+import androidx.wear.watchface.complications.*
 import androidx.wear.watchface.complications.SystemDataSources.Companion.NO_DATA_SOURCE
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
@@ -46,12 +42,9 @@ import com.benoitletondor.pixelminimalwatchface.helper.isSamsungHeartRateProvide
 import com.benoitletondor.pixelminimalwatchface.helper.sanitizeForSamsungGalaxyWatchIfNeeded
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
-import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplicationId
+import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplication
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.*
 import java.time.ZonedDateTime
 
 class ComplicationsSlots(
@@ -89,6 +82,11 @@ class ComplicationsSlots(
     private val rightComplicationDrawable = ComplicationDrawable()
     private var rightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = RIGHT_COMPLICATION_ID,
+    )
+
+    private val bottomComplicationDrawable = ComplicationDrawable()
+    private var bottomComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
+        complicationSlotId = BOTTOM_COMPLICATION_ID,
     )
 
     private var weatherDataWatcherJob: Job? = null
@@ -133,7 +131,7 @@ class ComplicationsSlots(
                 SystemDataSources.DATA_SOURCE_WATCH_BATTERY,
                 ComplicationType.SHORT_TEXT,
             ),
-            bounds = ComplicationSlotBounds(RectF(0f, 0f, 0f, 0f))
+            bounds = defaultComplicationSlotBounds,
         ).build()
 
         val weatherProviderInfo = context.getWeatherProviderInfo()
@@ -153,37 +151,47 @@ class ComplicationsSlots(
                 systemDataSourceFallback = NO_DATA_SOURCE,
                 systemDataSourceFallbackDefaultType = ComplicationType.SHORT_TEXT,
             ),
-            bounds = ComplicationSlotBounds(RectF(0f, 0f, 0f, 0f))
+            bounds = defaultComplicationSlotBounds,
         ).setEnabled(false).build()
 
         val leftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = LEFT_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                ComplicationLocation.LEFT.getComplicationDrawable(),
+                getComplicationDrawable(ComplicationLocation.LEFT),
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.LEFT),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
-            bounds = ComplicationLocation.LEFT.buildDefaultComplicationBounds(),
+            bounds = defaultComplicationSlotBounds,
         ).build()
 
         val middleComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = MIDDLE_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                ComplicationLocation.MIDDLE.getComplicationDrawable()
+                getComplicationDrawable(ComplicationLocation.MIDDLE)
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.MIDDLE),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
-            bounds = ComplicationLocation.MIDDLE.buildDefaultComplicationBounds(),
+            bounds = defaultComplicationSlotBounds,
         ).build()
 
         val rightComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = RIGHT_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                ComplicationLocation.RIGHT.getComplicationDrawable()
+                getComplicationDrawable(ComplicationLocation.RIGHT)
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.RIGHT),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
-            bounds = ComplicationLocation.RIGHT.buildDefaultComplicationBounds(),
+            bounds = defaultComplicationSlotBounds,
+        ).build()
+
+        val bottomComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = BOTTOM_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(
+                getComplicationDrawable(ComplicationLocation.BOTTOM)
+            ),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.BOTTOM),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = defaultComplicationSlotBounds,
         ).build()
 
         return listOf(
@@ -192,6 +200,7 @@ class ComplicationsSlots(
             leftComplication,
             middleComplication,
             rightComplication,
+            bottomComplication,
         )
     }
 
@@ -207,10 +216,10 @@ class ComplicationsSlots(
 
     fun updateComplicationDrawableStyles() {
         for(complicationLocation in ComplicationLocation.values()) {
-            val drawable = complicationLocation.getComplicationDrawable()
+            val drawable = getComplicationDrawable(complicationLocation)
 
             val colors = storage.getComplicationColors()
-            val primaryComplicationColor = colors.getPrimaryColorForComplicationId(complicationLocation.getComplicationId())
+            val primaryComplicationColor = colors.getPrimaryColorForComplication(complicationLocation)
 
             drawable.activeStyle.titleSize = titleSize
             drawable.ambientStyle.titleSize = titleSize
@@ -225,6 +234,20 @@ class ComplicationsSlots(
             drawable.activeStyle.borderColor = transparentColor
             drawable.ambientStyle.borderColor = transparentColor
         }
+    }
+
+    fun watchComplicationData(complicationLocation: ComplicationLocation): Flow<ComplicationData>
+        = complicationSlotsManager[complicationLocation.getComplicationId()]?.complicationData ?: emptyFlow()
+
+    fun getComplicationDrawable(complicationLocation: ComplicationLocation): ComplicationDrawable = when(complicationLocation) {
+        ComplicationLocation.LEFT -> leftComplicationDrawable
+        ComplicationLocation.MIDDLE -> middleComplicationDrawable
+        ComplicationLocation.RIGHT -> rightComplicationDrawable
+        ComplicationLocation.BOTTOM -> bottomComplicationDrawable
+        ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
+        ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
+        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
+        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
     }
 
     fun updateComplicationBounds(complicationLocation: ComplicationLocation, bounds: RectF) {
@@ -362,10 +385,10 @@ class ComplicationsSlots(
                             val batteryChargePercentage = text.substring(0, text.indexOf("%")).toInt()
                             watchBatteryLevelMutableFlow.emit(batteryChargePercentage)
 
-                            if (DEBUG_LOGS) Log.d("ComplicationsSlot", "batteryComplicationData received: $batteryChargePercentage")
+                            if (DEBUG_LOGS) Log.d("ComplicationsSlots", "batteryComplicationData received: $batteryChargePercentage")
                         }
                     } catch (e: Exception) {
-                        Log.e("ComplicationsSlot", "onComplicationDataUpdate, error while parsing battery data from complication", e)
+                        Log.e("ComplicationsSlots", "onComplicationDataUpdate, error while parsing battery data from complication", e)
                     }
                 }
             }
@@ -386,6 +409,7 @@ class ComplicationsSlots(
                                 leftComplicationOption,
                                 middleComplicationOption,
                                 rightComplicationOption,
+                                bottomComplicationOption,
                                 weatherComplicationOption,
                             ),
                         ),
@@ -395,55 +419,12 @@ class ComplicationsSlots(
         )
     }
 
-    private fun ComplicationLocation.buildDefaultComplicationBounds(): ComplicationSlotBounds = when(this) {
-        ComplicationLocation.LEFT -> ComplicationSlotBounds(
-            RectF(
-                LEFT_COMPLICATION_LEFT_BOUND,
-                LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
-                LEFT_COMPLICATION_RIGHT_BOUND,
-                LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND,
-            )
-        )
-        ComplicationLocation.MIDDLE -> ComplicationSlotBounds(
-            RectF(
-                MIDDLE_COMPLICATION_LEFT_BOUND,
-                LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
-                MIDDLE_COMPLICATION_RIGHT_BOUND,
-                LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND,
-            )
-        )
-        ComplicationLocation.RIGHT -> ComplicationSlotBounds(
-            RectF(
-                RIGHT_COMPLICATION_LEFT_BOUND,
-                LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND,
-                RIGHT_COMPLICATION_RIGHT_BOUND,
-                LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND,
-            )
-        )
-        ComplicationLocation.BOTTOM -> TODO()
-        ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
-    }
-
-    private fun ComplicationLocation.getComplicationDrawable(): ComplicationDrawable = when(this) {
-        ComplicationLocation.LEFT -> leftComplicationDrawable
-        ComplicationLocation.MIDDLE -> middleComplicationDrawable
-        ComplicationLocation.RIGHT -> rightComplicationDrawable
-        ComplicationLocation.BOTTOM -> TODO()
-        ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
-    }
-
     private fun ComplicationLocation.editComplicationOptions(action: (UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder) -> Unit) {
         val option = when(this) {
             ComplicationLocation.LEFT -> leftComplicationOption
             ComplicationLocation.MIDDLE -> middleComplicationOption
             ComplicationLocation.RIGHT -> rightComplicationOption
-            ComplicationLocation.BOTTOM -> TODO()
+            ComplicationLocation.BOTTOM -> bottomComplicationOption
             ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
             ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
             ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
@@ -460,7 +441,7 @@ class ComplicationsSlots(
             ComplicationLocation.LEFT -> leftComplicationOption = builder.build()
             ComplicationLocation.MIDDLE -> middleComplicationOption = builder.build()
             ComplicationLocation.RIGHT -> rightComplicationOption = builder.build()
-            ComplicationLocation.BOTTOM -> TODO()
+            ComplicationLocation.BOTTOM -> bottomComplicationOption = builder.build()
             ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
             ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
             ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
@@ -543,17 +524,9 @@ class ComplicationsSlots(
         private const val ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID = 108
         private const val ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID = 109
 
-        private const val LEFT_AND_RIGHT_COMPLICATIONS_TOP_BOUND = 0.15f
-        private const val LEFT_AND_RIGHT_COMPLICATIONS_BOTTOM_BOUND = 0.4f
-
-        private const val LEFT_COMPLICATION_LEFT_BOUND = 0.15f
-        private const val LEFT_COMPLICATION_RIGHT_BOUND = 0.35f
-
-        private const val MIDDLE_COMPLICATION_LEFT_BOUND = 0.40f
-        private const val MIDDLE_COMPLICATION_RIGHT_BOUND = 0.60f
-
-        private const val RIGHT_COMPLICATION_LEFT_BOUND = 0.65f
-        private const val RIGHT_COMPLICATION_RIGHT_BOUND = 0.85f
+        private val defaultComplicationSlotBounds = ComplicationSlotBounds(
+            RectF(0f, 0f, 0f, 0f)
+        )
 
         private val COMPLICATION_IDS = intArrayOf(
             LEFT_COMPLICATION_ID,
@@ -577,6 +550,33 @@ class ComplicationsSlots(
             ComplicationType.SHORT_TEXT,
             ComplicationType.SMALL_IMAGE,
         )
+
+        @SuppressLint("RestrictedApi")
+        fun createComplicationChooserIntent(
+            context: Context,
+            complicationLocation: ComplicationLocation,
+        ) = ComplicationHelperActivity.createComplicationDataSourceChooserHelperIntent(
+            context,
+            ComponentName(context, PixelMinimalWatchFace::class.java),
+            complicationLocation.getComplicationId(),
+            getSupportedComplicationTypes(complicationLocation),
+            null,
+            null,
+            null,
+        )
+
+        suspend fun retrieveProviderInfo(
+            context: Context,
+            complicationLocation: ComplicationLocation,
+            retriever: ComplicationDataSourceInfoRetriever,
+        ): ComplicationDataSourceInfo? {
+            val results = retriever.retrieveComplicationDataSourceInfo(
+                ComponentName(context, PixelMinimalWatchFace::class.java),
+                intArrayOf(complicationLocation.getComplicationId()),
+            )
+
+            return results?.firstOrNull()?.info
+        }
 
         private fun ComplicationLocation.getComplicationId(): Int {
             return when (this) {

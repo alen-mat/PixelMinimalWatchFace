@@ -15,11 +15,9 @@
  */
 package com.benoitletondor.pixelminimalwatchface.settings
 
-import android.content.ComponentName
 import android.content.Context
 import android.graphics.drawable.Drawable
-import android.support.wearable.complications.ComplicationProviderInfo
-import android.support.wearable.complications.ProviderInfoRetriever
+import android.graphics.drawable.Icon
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -29,13 +27,13 @@ import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import androidx.wear.watchface.complications.ComplicationDataSourceInfoRetriever
+import com.benoitletondor.pixelminimalwatchface.ComplicationsSlots
 import com.benoitletondor.pixelminimalwatchface.Injection
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace.Companion.getComplicationId
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
-import java.util.concurrent.Executors
+import kotlinx.coroutines.*
 
 class WidgetConfigRecyclerViewAdapter(
     private val complicationLocation: ComplicationLocation,
@@ -44,8 +42,9 @@ class WidgetConfigRecyclerViewAdapter(
     private val onSelectComplicationClicked: () -> Unit,
     private val onSelectColorClicked: () -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val providerInfoRetriever = ProviderInfoRetriever(context, Executors.newCachedThreadPool())
+    private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
     private var widgetViewHolder: WidgetViewHolder? = null
     private var colorViewHolder: ColorViewHolder? = null
     private var showColor = true
@@ -108,12 +107,6 @@ class WidgetConfigRecyclerViewAdapter(
         return if( showColor ) { 3 } else { 2 }
     }
 
-    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
-        super.onAttachedToRecyclerView(recyclerView)
-
-        providerInfoRetriever.init()
-    }
-
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
 
@@ -121,12 +114,13 @@ class WidgetConfigRecyclerViewAdapter(
     }
 
     fun onDestroy() {
-        providerInfoRetriever.release()
+        complicationDataSourceInfoRetriever.close()
+        scope.cancel()
     }
 
-    fun updateComplication(complicationProviderInfo: ComplicationProviderInfo?) {
-        widgetViewHolder?.updateComplicationView(complicationProviderInfo)
-        showColor = complicationProviderInfo != null
+    fun updateComplication(complicationSourceIcon: Icon?) {
+        widgetViewHolder?.updateComplicationView(complicationSourceIcon)
+        showColor = complicationSourceIcon != null
     }
 
     fun updatePreviewColors(color: ComplicationColor) {
@@ -134,15 +128,15 @@ class WidgetConfigRecyclerViewAdapter(
     }
 
     private fun initializesColorsAndComplications() {
-        providerInfoRetriever.retrieveProviderInfo(
-            object : ProviderInfoRetriever.OnProviderInfoReceivedCallback() {
-                override fun onProviderInfoReceived(watchFaceComplicationId: Int, complicationProviderInfo: ComplicationProviderInfo?) {
-                    updateComplication(complicationProviderInfo)
-                }
-            },
-            ComponentName(context, PixelMinimalWatchFace::class.java),
-            getComplicationId(complicationLocation)
-        )
+        scope.launch {
+            val providerInfo = ComplicationsSlots.retrieveProviderInfo(
+                context,
+                complicationLocation,
+                complicationDataSourceInfoRetriever,
+            )
+
+            updateComplication(providerInfo?.icon)
+        }
     }
 
     private class TitleViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -168,10 +162,10 @@ class WidgetConfigRecyclerViewAdapter(
         }
 
         fun updateComplicationView(
-            complicationProviderInfo: ComplicationProviderInfo?
+            complicationSourceIcon: Icon?,
         ) {
-            if (complicationProviderInfo != null) {
-                button.setImageIcon(complicationProviderInfo.providerIcon)
+            if (complicationSourceIcon != null) {
+                button.setImageIcon(complicationSourceIcon)
                 background.setImageDrawable(addedComplicationDrawable)
                 subtitle.text = itemView.context.getString(R.string.config_complication_tap_to_change)
             } else {

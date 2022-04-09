@@ -26,7 +26,6 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import com.google.android.wearable.input.RotaryEncoderHelper
 
 class FullBrightnessActivity : Activity() {
     private val broadcastReceiver = object : BroadcastReceiver() {
@@ -49,7 +48,7 @@ class FullBrightnessActivity : Activity() {
             true
         }
         window.decorView.setOnGenericMotionListener(View.OnGenericMotionListener { _, ev ->
-            if ( ev.action == MotionEvent.ACTION_SCROLL && RotaryEncoderHelper.isFromRotaryEncoder(ev) ) {
+            if ( ev.action == MotionEvent.ACTION_SCROLL ) {
                 finish()
                 return@OnGenericMotionListener true
             }

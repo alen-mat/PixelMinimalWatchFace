@@ -26,7 +26,6 @@ import android.os.ResultReceiver
 import android.widget.Toast
 import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.R
-import com.google.android.wearable.intent.RemoteIntent
 
 /**
  * Rating popup that ask user for feedback and redirect them to the PlayStore

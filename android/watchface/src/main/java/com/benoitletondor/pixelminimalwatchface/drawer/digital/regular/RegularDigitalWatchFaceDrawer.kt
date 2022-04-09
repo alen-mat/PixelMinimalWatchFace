@@ -15,6 +15,7 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital.regular
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.graphics.drawable.Drawable
@@ -29,22 +30,34 @@ import androidx.wear.watchface.WatchState
 import com.benoitletondor.pixelminimalwatchface.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
-import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
-import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
-import com.benoitletondor.pixelminimalwatchface.model.Storage
-import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplicationId
+import com.benoitletondor.pixelminimalwatchface.model.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
 import java.util.*
 import kotlin.math.*
 
+@SuppressLint("RestrictedApi")
 class RegularDigitalWatchFaceDrawer(
     private val context: Context,
     private val storage: Storage,
     private val watchState: WatchState,
     private val complicationsSlots: ComplicationsSlots,
 ) : WatchFaceDrawer {
-    private var drawingState: RegularDrawerDrawingState = RegularDrawerDrawingState.NoScreenData
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private var drawingState: RegularDrawerDrawingState = kotlin.run {
+        val screenSize = context.getScreenSize()
+
+        RegularDrawerDrawingState.NoCacheAvailable(
+            screenSize.width,
+            screenSize.height,
+            screenSize.width / 2f,
+            screenSize.height / 2f,
+        )
+    }
 
     private val productSansRegularFont: Typeface = ResourcesCompat.getFont(context, R.font.product_sans_regular)!!
     private val wearOSLogoPaint = Paint()
@@ -77,8 +90,6 @@ class RegularDigitalWatchFaceDrawer(
         isAntiAlias = true
     }
     private val distanceBetweenPhoneAndWatchBattery: Int = context.dpToPx(3)
-    private val titleSize: Int = context.resources.getDimensionPixelSize(R.dimen.complication_title_size)
-    private val textSize: Int = context.resources.getDimensionPixelSize(R.dimen.complication_text_size)
     private val timeFormatter24H = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val timeFormatter12H = SimpleDateFormat("h:mm", Locale.getDefault())
     private var currentTimeSize = storage.getTimeSize()
@@ -89,11 +100,36 @@ class RegularDigitalWatchFaceDrawer(
     private val weatherAndBatteryIconColorFilterDimmed: ColorFilter = PorterDuffColorFilter(dateAndBatteryColorDimmed, PorterDuff.Mode.SRC_IN)
 
     init {
-
+        scope.launch {
+            storage.watchComplicationColors()
+                .combine(complicationsSlots.watchComplicationData(ComplicationLocation.BOTTOM)) { colors, data ->
+                    Pair(
+                        colors,
+                        data
+                    )
+                }
+                .collect { (complicationColors, complicationData) ->
+                    val primaryComplicationColor = complicationColors.getPrimaryColorForComplication(ComplicationLocation.BOTTOM)
+                    val complicationDrawable = complicationsSlots.getComplicationDrawable(ComplicationLocation.BOTTOM)
+                    val data = complicationData.asWireComplicationData()
+                    if( data.icon != null ) {
+                        if( data.longTitle != null ) {
+                            complicationDrawable.activeStyle.textColor = primaryComplicationColor
+                            complicationDrawable.ambientStyle.textColor = dateAndBatteryColorDimmed
+                        } else {
+                            complicationDrawable.activeStyle.textColor = complicationTitleColor
+                            complicationDrawable.ambientStyle.textColor = complicationTitleColor
+                        }
+                    } else {
+                        complicationDrawable.activeStyle.textColor = primaryComplicationColor
+                        complicationDrawable.ambientStyle.textColor = dateAndBatteryColorDimmed
+                    }
+                }
+        }
     }
 
     override fun onDestroy() {
-
+        scope.cancel()
     }
 
     override fun getActiveComplicationLocations(): Set<ComplicationLocation> = setOf(
@@ -146,7 +182,7 @@ class RegularDigitalWatchFaceDrawer(
     }
 
     private fun setPaintVariables(
-        ambient:Boolean,
+        ambient: Boolean,
         lowBitAmbient: Boolean,
     ) {
         wearOSLogoPaint.isAntiAlias = !ambient
@@ -242,14 +278,14 @@ class RegularDigitalWatchFaceDrawer(
 
         val maxWidth = max(sizeOfComplication, wearOsImage.width)
 
-        // TODO convert bounds to complication bounds
-
         val leftBounds = Rect(
             (centerX - (maxWidth / 2) - distanceBetweenComplications - sizeOfComplication).toInt(),
             verticalOffset,
             (centerX - (maxWidth / 2)  - distanceBetweenComplications).toInt(),
             (verticalOffset + sizeOfComplication)
         )
+
+        complicationsSlots.updateComplicationBounds(ComplicationLocation.LEFT, context.convertAbsoluteBoundsToScreenBounds(leftBounds))
 
         val middleBounds = Rect(
             (centerX - (sizeOfComplication / 2)).toInt(),
@@ -258,6 +294,8 @@ class RegularDigitalWatchFaceDrawer(
             (verticalOffset + sizeOfComplication)
         )
 
+        complicationsSlots.updateComplicationBounds(ComplicationLocation.MIDDLE, context.convertAbsoluteBoundsToScreenBounds(middleBounds))
+
         val rightBounds = Rect(
             (centerX + (maxWidth / 2) + distanceBetweenComplications).toInt(),
             verticalOffset,
@@ -265,18 +303,23 @@ class RegularDigitalWatchFaceDrawer(
             (verticalOffset + sizeOfComplication)
         )
 
+        complicationsSlots.updateComplicationBounds(ComplicationLocation.RIGHT, context.convertAbsoluteBoundsToScreenBounds(rightBounds))
+
         val availableBottomSpace = screenHeight - bottomTop - watchState.chinHeight - topAndBottomMargins
         val bottomComplicationHeight = min(availableBottomSpace, context.dpToPx(36).toFloat())
         val bottomComplicationTop = if(context.resources.configuration.isScreenRound) { bottomTop.toInt() + context.dpToPx(5) } else { (bottomTop + + context.dpToPx(5) + availableBottomSpace - bottomComplicationHeight).toInt() }
         val bottomComplicationBottom = if(context.resources.configuration.isScreenRound) { (bottomTop + bottomComplicationHeight).toInt() } else { (bottomTop + availableBottomSpace).toInt() }
         val bottomComplicationLeft = computeComplicationLeft(bottomComplicationBottom, screenHeight)
         val bottomComplicationWidth = (screenWidth - 2* bottomComplicationLeft) * 0.9
+
         val bottomBounds = Rect(
             (centerX - (bottomComplicationWidth / 2)).toInt(),
             bottomComplicationTop,
             (centerX + (bottomComplicationWidth / 2)).toInt(),
             bottomComplicationBottom
         )
+
+        complicationsSlots.updateComplicationBounds(ComplicationLocation.BOTTOM, context.convertAbsoluteBoundsToScreenBounds(bottomBounds))
 
         val iconXOffset = centerX - (wearOsImage.width / 2.0f)
         val iconYOffset = leftBounds.top + (leftBounds.height() / 2) - (wearOsImage.height / 2)

@@ -15,26 +15,22 @@
  */
 package com.benoitletondor.pixelminimalwatchface.settings
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
-import android.support.wearable.complications.ComplicationHelperActivity
-import android.support.wearable.complications.ComplicationProviderInfo
-import android.support.wearable.complications.ProviderInfoRetriever
-import android.support.wearable.complications.ProviderInfoRetriever.OnProviderInfoReceivedCallback
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import androidx.wear.watchface.ComplicationHelperActivity
+import androidx.wear.watchface.complications.ComplicationDataSourceInfoRetriever
 import com.benoitletondor.pixelminimalwatchface.*
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace.Companion.getComplicationId
-import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
-import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.isPermissionGranted
 import com.benoitletondor.pixelminimalwatchface.helper.isScreenRound
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.settings.SettingsActivity.Companion.COMPLICATION_CONFIG_REQUEST_CODE
-import java.util.concurrent.Executors
+import kotlinx.coroutines.*
 import kotlin.collections.ArrayList
 
 private const val TYPE_HEADER = 0
@@ -98,17 +94,19 @@ class ComplicationConfigRecyclerViewAdapter(
     private val changeSecondsRingColorButtonPressed: () -> Unit,
     private val widgetsSizeChangedListener: (Int) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var selectedComplicationLocation: ComplicationLocation? = null
 
     private val watchFaceComponentName = ComponentName(context, PixelMinimalWatchFace::class.java)
-    private val providerInfoRetriever = ProviderInfoRetriever(context, Executors.newCachedThreadPool())
+    private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
     private var regularComplicationsViewHolder: RegularComplicationsViewHolder? = null
     private var android12ComplicationsViewHolder: Android12ComplicationsViewHolder? = null
     private var showWeatherViewHolder: ShowWeatherViewHolder? = null
     private var showBatteryViewHolder: ShowBatteryViewHolder? = null
     private var settings: List<Int> = emptyList()
 
+    @SuppressLint("RestrictedApi")
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         when (viewType) {
             TYPE_HEADER -> return HeaderViewHolder(
@@ -249,7 +247,9 @@ class ComplicationConfigRecyclerViewAdapter(
                             (context as Activity).startActivityForResult(
                                 ComplicationHelperActivity.createPermissionRequestHelperIntent(
                                     context,
-                                    watchFaceComponentName
+                                    watchFaceComponentName,
+                                    null,
+                                    null,
                                 ),
                                 SettingsActivity.COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE
                             )
@@ -275,7 +275,9 @@ class ComplicationConfigRecyclerViewAdapter(
                         (context as Activity).startActivityForResult(
                             ComplicationHelperActivity.createPermissionRequestHelperIntent(
                                 context,
-                                watchFaceComponentName
+                                watchFaceComponentName,
+                                null,
+                                null,
                             ),
                             SettingsActivity.COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE
                         )
@@ -503,55 +505,39 @@ class ComplicationConfigRecyclerViewAdapter(
     }
 
     private fun initializesRegularColorsAndComplications() {
-        val complicationIds = RegularDigitalWatchFaceDrawer.ACTIVE_COMPLICATIONS
-
-        providerInfoRetriever.retrieveProviderInfo(
-            object : OnProviderInfoReceivedCallback() {
-                override fun onProviderInfoReceived(watchFaceComplicationId: Int, complicationProviderInfo: ComplicationProviderInfo?) {
-                    val complicationLocation = when (watchFaceComplicationId) {
-                        getComplicationId(ComplicationLocation.LEFT) -> { ComplicationLocation.LEFT }
-                        getComplicationId(ComplicationLocation.MIDDLE) -> { ComplicationLocation.MIDDLE }
-                        getComplicationId(ComplicationLocation.BOTTOM) -> { ComplicationLocation.BOTTOM }
-                        getComplicationId(ComplicationLocation.RIGHT) -> { ComplicationLocation.RIGHT  }
-                        else -> null
-                    } ?: return
-
-                    regularComplicationsViewHolder?.updateComplicationViews(
-                        complicationLocation,
-                        complicationProviderInfo,
-                        storage.getComplicationColors()
-                    )
-                }
-            },
-            watchFaceComponentName,
-            *complicationIds
-        )
+        initializeColorsAndComplications(listOf(
+            ComplicationLocation.LEFT,
+            ComplicationLocation.RIGHT,
+            ComplicationLocation.BOTTOM,
+            ComplicationLocation.MIDDLE,
+        ))
     }
 
     private fun initializesAndroid12ColorsAndComplications() {
-        val complicationIds = Android12DigitalWatchFaceDrawer.ACTIVE_COMPLICATIONS
+        initializeColorsAndComplications(listOf(
+            ComplicationLocation.ANDROID_12_TOP_LEFT,
+            ComplicationLocation.ANDROID_12_TOP_RIGHT,
+            ComplicationLocation.ANDROID_12_BOTTOM_LEFT,
+            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT,
+        ))
+    }
 
-        providerInfoRetriever.retrieveProviderInfo(
-            object : OnProviderInfoReceivedCallback() {
-                override fun onProviderInfoReceived(watchFaceComplicationId: Int, complicationProviderInfo: ComplicationProviderInfo?) {
-                    val complicationLocation = when (watchFaceComplicationId) {
-                        getComplicationId(ComplicationLocation.ANDROID_12_TOP_LEFT) -> { ComplicationLocation.ANDROID_12_TOP_LEFT }
-                        getComplicationId(ComplicationLocation.ANDROID_12_TOP_RIGHT) -> { ComplicationLocation.ANDROID_12_TOP_RIGHT }
-                        getComplicationId(ComplicationLocation.ANDROID_12_BOTTOM_LEFT) -> { ComplicationLocation.ANDROID_12_BOTTOM_LEFT }
-                        getComplicationId(ComplicationLocation.ANDROID_12_BOTTOM_RIGHT) -> { ComplicationLocation.ANDROID_12_BOTTOM_RIGHT }
-                        else -> null
-                    } ?: return
+    private fun initializeColorsAndComplications(complicationLocations: List<ComplicationLocation>) {
+        for(complicationLocation in complicationLocations) {
+            scope.launch {
+                val providerInfo = ComplicationsSlots.retrieveProviderInfo(
+                    context,
+                    complicationLocation,
+                    complicationDataSourceInfoRetriever,
+                )
 
-                    android12ComplicationsViewHolder?.updateComplicationViews(
-                        complicationLocation,
-                        complicationProviderInfo,
-                        storage.getComplicationColors()
-                    )
-                }
-            },
-            watchFaceComponentName,
-            *complicationIds
-        )
+                regularComplicationsViewHolder?.updateComplicationViews(
+                    complicationLocation,
+                    providerInfo?.icon,
+                    storage.getComplicationColors(),
+                )
+            }
+        }
     }
 
     override fun getItemViewType(position: Int): Int = settings[position]
@@ -641,12 +627,6 @@ class ComplicationConfigRecyclerViewAdapter(
         return list
     }
 
-    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
-        super.onAttachedToRecyclerView(recyclerView)
-
-        providerInfoRetriever.init()
-    }
-
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
 
@@ -654,7 +634,8 @@ class ComplicationConfigRecyclerViewAdapter(
     }
 
     fun onDestroy() {
-        providerInfoRetriever.release()
+        scope.cancel()
+        complicationDataSourceInfoRetriever.close()
     }
 
     fun weatherComplicationPermissionFinished() {

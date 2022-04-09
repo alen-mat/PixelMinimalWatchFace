@@ -20,8 +20,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.pm.PackageManager
+import android.graphics.Rect
+import android.graphics.RectF
 import android.util.DisplayMetrics
 import android.util.Log
+import android.util.Size
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
@@ -59,4 +62,20 @@ fun Context.openActivity(packageName: String, activityName: String) {
     } catch (t: Throwable) {
         Log.e("Pixel Minimal Watch Face", "Can't open activity: $activityName", t)
     }
+}
+
+fun Context.getScreenSize(): Size {
+    val metrics = resources.displayMetrics
+    return Size(metrics.widthPixels, metrics.heightPixels)
+}
+
+fun Context.convertAbsoluteBoundsToScreenBounds(bounds: Rect): RectF {
+    val screenSize = getScreenSize()
+
+    return RectF(
+        bounds.left / screenSize.width.toFloat(),
+        bounds.top / screenSize.height.toFloat(),
+        bounds.right / screenSize.width.toFloat(),
+        bounds.bottom / screenSize.height.toFloat(),
+    )
 }

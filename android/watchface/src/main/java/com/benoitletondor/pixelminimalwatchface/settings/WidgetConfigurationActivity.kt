@@ -15,20 +15,17 @@
  */
 package com.benoitletondor.pixelminimalwatchface.settings
 
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
-import android.support.wearable.complications.ComplicationHelperActivity
 import android.support.wearable.complications.ComplicationProviderInfo
-import android.support.wearable.complications.ProviderChooserIntent
+import androidx.wear.watchface.ComplicationDataSourceChooserIntent.EXTRA_PROVIDER_INFO
 import androidx.wear.widget.WearableLinearLayoutManager
+import com.benoitletondor.pixelminimalwatchface.ComplicationsSlots
 import com.benoitletondor.pixelminimalwatchface.Injection
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace.Companion.getComplicationId
-import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace.Companion.getSupportedComplicationTypes
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.databinding.ActivityWidgetConfigBinding
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
@@ -78,12 +75,7 @@ class WidgetConfigurationActivity : Activity() {
             },
             onSelectComplicationClicked = {
                 startActivityForResult(
-                    ComplicationHelperActivity.createProviderChooserHelperIntent(
-                        this,
-                        ComponentName(this, PixelMinimalWatchFace::class.java),
-                        getComplicationId(complicationLocation),
-                        *getSupportedComplicationTypes(complicationLocation)
-                    ),
+                    ComplicationsSlots.createComplicationChooserIntent(this, complicationLocation),
                     COMPLICATION_CONFIG_REQUEST_CODE
                 )
             }
@@ -97,12 +89,12 @@ class WidgetConfigurationActivity : Activity() {
         }
     }
 
+    @SuppressLint("RestrictedApi")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == COMPLICATION_CONFIG_REQUEST_CODE && resultCode == RESULT_OK) {
-            val complicationProviderInfo: ComplicationProviderInfo? = data?.getParcelableExtra(
-                ProviderChooserIntent.EXTRA_PROVIDER_INFO)
+            val complicationProviderInfo: ComplicationProviderInfo? = data?.getParcelableExtra(EXTRA_PROVIDER_INFO)
 
-            adapter.updateComplication(complicationProviderInfo)
+            adapter.updateComplication(complicationProviderInfo?.providerIcon)
 
             setResult(RESULT_OK)
         } else if (requestCode == UPDATE_COLORS_CONFIG_REQUEST_CODE && resultCode == RESULT_OK) {

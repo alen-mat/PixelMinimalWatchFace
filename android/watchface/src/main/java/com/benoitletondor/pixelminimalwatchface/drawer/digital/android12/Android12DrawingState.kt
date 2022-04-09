@@ -15,6 +15,7 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital.android12
 
+/*
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
@@ -54,3 +55,5 @@ data class ComplicationsDrawingCache(
     val wearOSLogo: Bitmap,
     val wearOSLogoRect: Rect,
 )
+
+ */

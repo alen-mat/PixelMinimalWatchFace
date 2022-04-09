@@ -15,6 +15,7 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital.android12
 
+/*
 import android.content.Context
 import android.graphics.*
 import android.graphics.drawable.Drawable
@@ -579,3 +580,5 @@ class Android12DigitalWatchFaceDrawer(
         private const val TAG = "PixelMinimalWatchFace/Android12Drawer"
     }
 }
+
+ */
