@@ -2,6 +2,8 @@ package com.benoitletondor.pixelminimalwatchface
 
 import android.content.Context
 import android.graphics.RectF
+import android.util.Log
+import android.util.SparseArray
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.wear.watchface.CanvasComplicationFactory
@@ -9,21 +11,43 @@ import androidx.wear.watchface.ComplicationSlot
 import androidx.wear.watchface.ComplicationSlotsManager
 import androidx.wear.watchface.complications.ComplicationSlotBounds
 import androidx.wear.watchface.complications.DefaultComplicationDataSourcePolicy
+import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
+import androidx.wear.watchface.complications.data.EmptyComplicationData
 import androidx.wear.watchface.complications.rendering.CanvasComplicationDrawable
 import androidx.wear.watchface.complications.rendering.ComplicationDrawable
 import androidx.wear.watchface.style.CurrentUserStyleRepository
 import androidx.wear.watchface.style.UserStyleSetting
 import androidx.wear.watchface.style.WatchFaceLayer
+import com.benoitletondor.pixelminimalwatchface.helper.ComplicationDataHelper.updateComplicationData
+import com.benoitletondor.pixelminimalwatchface.helper.isSamsungCalendarBuggyProvider
+import com.benoitletondor.pixelminimalwatchface.helper.isSamsungHeartRateProvider
+import com.benoitletondor.pixelminimalwatchface.helper.sanitizeForSamsungGalaxyWatchIfNeeded
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplicationId
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class ComplicationsSlots(
     private val context: Context,
     private val storage: Storage,
     private val currentUserStyleRepository: CurrentUserStyleRepository,
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val activeSlots: MutableSet<ComplicationLocation> = mutableSetOf()
+    private val activeComplicationWatchingJobs: MutableList<Job> = mutableListOf()
+    private val rawComplicationDataSparseArray: SparseArray<ComplicationData> = SparseArray(COMPLICATION_IDS.size)
+
+    private lateinit var complicationSlotsManager: ComplicationSlotsManager
+
+    private val invalidateRendererMutableEventFlow = MutableSharedFlow<Unit>()
+    val invalidateRendererEventFlow: Flow<Unit> = invalidateRendererMutableEventFlow
+
     private val titleSize = context.resources.getDimensionPixelSize(R.dimen.complication_title_size)
     private val complicationTitleColor = ContextCompat.getColor(context, R.color.complication_title_color)
     private val dateAndBatteryColorDimmed = ContextCompat.getColor(context, R.color.face_date_dimmed)
@@ -44,6 +68,127 @@ class ComplicationsSlots(
     private var rightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = RIGHT_COMPLICATION_ID,
     )
+
+    private val galaxyWatch4HeartRateComplicationsLocationsMutableFlow = MutableStateFlow<Set<ComplicationLocation>>(emptySet())
+    val galaxyWatch4HeartRateComplicationsLocationsFlow: Flow<Set<ComplicationLocation>> = galaxyWatch4HeartRateComplicationsLocationsMutableFlow
+
+    private val calendarBuggyComplicationsLocationsMutableFlow = MutableStateFlow<Set<ComplicationLocation>>(emptySet())
+    val calendarBuggyComplicationsLocationsFlow: StateFlow<Set<ComplicationLocation>> = calendarBuggyComplicationsLocationsMutableFlow
+
+    fun onCreate(complicationSlotsManager: ComplicationSlotsManager) {
+        this.complicationSlotsManager = complicationSlotsManager
+    }
+
+    fun onDestroy() {
+        scope.cancel()
+    }
+
+    private fun watchComplicationSlotsData() {
+        activeComplicationWatchingJobs.forEach { it.cancel() }
+        activeComplicationWatchingJobs.clear()
+
+        complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
+            if (slot.id.toComplicationLocation() !in activeSlots) {
+                return@forEach
+            }
+
+            val location = slot.id.toComplicationLocation() ?: return@forEach
+
+            val job = scope.launch {
+                var lastSanitizedData: ComplicationData? = null
+                slot.complicationData.collect { complicationData ->
+                    if (complicationData != lastSanitizedData) {
+                        rawComplicationDataSparseArray.put(slot.id, complicationData)
+
+                        updateGalaxyWatch4ComplicationSlots(
+                            location,
+                            complicationData,
+                            slot.id,
+                        )
+
+                        complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
+                            context,
+                            storage,
+                            slot.id,
+                            complicationData.dataSource,
+                        )?.let { sanitizedData ->
+                            lastSanitizedData = sanitizedData
+
+                            updateComplicationData(
+                                complicationSlotsManager,
+                                slot.id,
+                                sanitizedData,
+                            )
+
+                            invalidateRendererMutableEventFlow.emit(Unit)
+                        }
+                    }
+                }
+            }
+
+            activeComplicationWatchingJobs.add(job)
+        }
+    }
+
+    private fun updateGalaxyWatch4ComplicationSlots(
+        location: ComplicationLocation,
+        complicationData: ComplicationData,
+        complicationId: Int
+    ) {
+        updateGalaxyWatch4HRComplicationSlots(
+            location,
+            complicationData,
+            complicationId,
+        )
+
+        updateGalaxyWatch4CalendarComplicationSlots(
+            location,
+            complicationData,
+            complicationId,
+        )
+    }
+
+    private fun updateGalaxyWatch4HRComplicationSlots(
+        location: ComplicationLocation,
+        complicationData: ComplicationData,
+        complicationSlotId: Int,
+    ) {
+        val isGalaxyWatch4HeartRateComplication = complicationData.dataSource?.isSamsungHeartRateProvider() == true
+        if (isGalaxyWatch4HeartRateComplication && location !in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
+            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 HR complication detected, id: $complicationSlotId")
+
+            galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
+                add(location)
+            }
+        } else {
+            if (location in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
+                galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
+                    remove(location)
+                }
+            }
+        }
+    }
+
+    private fun updateGalaxyWatch4CalendarComplicationSlots(
+        location: ComplicationLocation,
+        complicationData: ComplicationData,
+        complicationSlotId: Int,
+    ) {
+        val isGalaxyWatch4CalendarComplication = complicationData.dataSource?.isSamsungCalendarBuggyProvider() == true
+        if (isGalaxyWatch4CalendarComplication && location !in calendarBuggyComplicationsLocationsMutableFlow.value) {
+            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 buggy calendar complication detected, id: $complicationSlotId")
+
+            calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
+                add(location)
+            }
+        } else {
+            if (location in calendarBuggyComplicationsLocationsMutableFlow.value) {
+                calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
+                    remove(location)
+                }
+            }
+        }
+    }
 
     fun createComplicationsSlots(): List<ComplicationSlot> {
         // TODO other slots
@@ -132,7 +277,22 @@ class ComplicationsSlots(
             }
         }
 
+        galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = emptySet()
+        rawComplicationDataSparseArray.clear()
+        activeSlots.clear()
+        activeSlots.addAll(activeLocations)
+
         updateComplicationSetting()
+        watchComplicationSlotsData()
+    }
+
+    fun refreshDataAtLocation(complicationLocation: ComplicationLocation) {
+        val complicationId = complicationLocation.getComplicationId()
+        updateComplicationData(
+            complicationSlotsManager,
+            complicationId,
+            rawComplicationDataSparseArray.get(complicationId, EmptyComplicationData()),
+        )
     }
 
     private fun updateComplicationSetting() {
@@ -257,7 +417,7 @@ class ComplicationsSlots(
         private const val RIGHT_COMPLICATION_LEFT_BOUND = 0.65f
         private const val RIGHT_COMPLICATION_RIGHT_BOUND = 0.85f
 
-        val COMPLICATION_IDS = intArrayOf(
+        private val COMPLICATION_IDS = intArrayOf(
             LEFT_COMPLICATION_ID,
             MIDDLE_COMPLICATION_ID,
             RIGHT_COMPLICATION_ID,
@@ -290,6 +450,20 @@ class ComplicationsSlots(
                 ComplicationLocation.ANDROID_12_TOP_RIGHT -> ANDROID_12_TOP_RIGHT_COMPLICATION_ID
                 ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID
                 ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID
+            }
+        }
+
+        private fun Int.toComplicationLocation(): ComplicationLocation? {
+            return when (this) {
+                LEFT_COMPLICATION_ID -> ComplicationLocation.LEFT
+                MIDDLE_COMPLICATION_ID -> ComplicationLocation.MIDDLE
+                RIGHT_COMPLICATION_ID -> ComplicationLocation.RIGHT
+                BOTTOM_COMPLICATION_ID -> ComplicationLocation.BOTTOM
+                ANDROID_12_TOP_LEFT_COMPLICATION_ID -> ComplicationLocation.ANDROID_12_TOP_LEFT
+                ANDROID_12_TOP_RIGHT_COMPLICATION_ID -> ComplicationLocation.ANDROID_12_TOP_RIGHT
+                ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID -> ComplicationLocation.ANDROID_12_BOTTOM_LEFT
+                ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID -> ComplicationLocation.ANDROID_12_BOTTOM_RIGHT
+                else -> null
             }
         }
 

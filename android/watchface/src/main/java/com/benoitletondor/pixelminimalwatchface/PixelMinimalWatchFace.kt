@@ -85,10 +85,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
     }
 
-    override fun onCr
-
     override fun onDestroy() {
         scope.cancel()
+        complicationsSlots.onDestroy()
 
         super.onDestroy()
     }
@@ -100,12 +99,18 @@ class PixelMinimalWatchFace : WatchFaceService() {
     )
 
     override fun createComplicationSlotsManager(currentUserStyleRepository: CurrentUserStyleRepository): ComplicationSlotsManager {
+        if (this::complicationsSlots.isInitialized) {
+            complicationsSlots.onDestroy()
+        }
+
         complicationsSlots = ComplicationsSlots(this, storage, currentUserStyleRepository)
 
         return ComplicationSlotsManager(
             complicationsSlots.createComplicationsSlots(),
             currentUserStyleRepository,
-        )
+        ).apply {
+            complicationsSlots.onCreate(this)
+        }
     }
 
     override suspend fun createWatchFace(
@@ -121,10 +126,10 @@ class PixelMinimalWatchFace : WatchFaceService() {
             context = applicationContext,
             surfaceHolder = surfaceHolder,
             watchState = watchState,
-            complicationSlotsManager = complicationSlotsManager,
             currentUserStyleRepository = currentUserStyleRepository,
             canvasType = CanvasType.SOFTWARE,
             storage = storage,
+            complicationsSlots = complicationsSlots,
         )
 
         // Creates the watch face.
@@ -138,64 +143,105 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private val context: Context,
         surfaceHolder: SurfaceHolder,
         private val watchState: WatchState,
-        private val complicationSlotsManager: ComplicationSlotsManager,
         private val currentUserStyleRepository: CurrentUserStyleRepository,
         canvasType: Int,
         private val storage: Storage,
         private val complicationsSlots: ComplicationsSlots,
-    ) : Renderer.CanvasRenderer(
+    ) : Renderer.CanvasRenderer2<Renderer.SharedAssets>(
         surfaceHolder = surfaceHolder,
         currentUserStyleRepository = currentUserStyleRepository,
         watchState = watchState,
         canvasType = canvasType,
         interactiveDrawModeUpdateDelayMillis = 60000L,
-    ) {
+        clearWithBackgroundTintBeforeRenderingHighlightLayer = false,
+    ), DataClient.OnDataChangedListener, MessageClient.OnMessageReceivedListener {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
         private var watchFaceDrawer: WatchFaceDrawer
 
-        private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
-        private val complicationProviderSparseArray: SparseArray<ComplicationDataSourceInfo> = SparseArray(ComplicationsSlots.COMPLICATION_IDS.size)
-        private val rawComplicationDataSparseArray: SparseArray<ComplicationData> = SparseArray(ComplicationsSlots.COMPLICATION_IDS.size)
-
-        // TODO implement this
-        private var lastGalaxyWatch4CalendarWidgetForcedRefreshTs: Long? = null
-        private val calendarBuggyComplicationsIds = mutableSetOf<Int>()
-
-        private val galaxyWatch4HeartRateComplicationsIds = MutableStateFlow<Set<Int>>(emptySet())
+        private var galaxyWatch4CalendarWatcherJob: Job? = null
         private var galaxyWatch4HeartRateWatcherJob: Job? = null
+
+        private var phoneBatteryStatus: PhoneBatteryStatus = PhoneBatteryStatus.Unknown
 
         init {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
 
             watchWatchFaceDrawerChanges()
-            watchComplicationsDataProviderChanges()
             watchComplicationsColorChanges()
             watchGalaxyWatch4HRComplications()
-            watchComplicationsDataChangesAndSanitize()
-        }
+            watchGalaxyWatch4CalendarComplications()
+            watchComplicationSlotsRendererInvalidate()
 
-        private fun watchComplicationsColorChanges() {
-            scope.launch {
-                storage.watchComplicationColors()
-                    .collect {
-                        complicationsSlots.updateComplicationDrawableStyles()
-                    }
-            }
+            Wearable.getDataClient(context).addListener(this)
+            Wearable.getMessageClient(context).addListener(this)
+            syncPhoneBatteryStatus()
         }
 
         override fun onDestroy() {
             scope.cancel()
-            complicationDataSourceInfoRetriever.close()
 
             super.onDestroy()
         }
 
-        override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {
+        override suspend fun createSharedAssets(): SharedAssets = object : SharedAssets {
+            override fun onDestroy() {}
+        }
+
+        override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {
             watchFaceDrawer.render(canvas, bounds, zonedDateTime)
         }
 
-        override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {}
+        override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {}
+
+        override fun onDataChanged(dataEvents: DataEventBuffer) {
+            for (event in dataEvents) {
+                if (event.type == DataEvent.TYPE_CHANGED) {
+                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+
+                    if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
+                        handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
+                    }
+                }
+            }
+        }
+
+        override fun onMessageReceived(messageEvent: MessageEvent) {
+            if (messageEvent.path == DATA_KEY_BATTERY_STATUS_PERCENT) {
+                try {
+                    val phoneBatteryPercentage: Int = messageEvent.data[0].toInt()
+                    if (phoneBatteryPercentage in 0..100) {
+                        val previousPhoneBatteryStatus = phoneBatteryStatus as? PhoneBatteryStatus.DataReceived
+                        phoneBatteryStatus = PhoneBatteryStatus.DataReceived(phoneBatteryPercentage, System.currentTimeMillis())
+
+                        if (storage.showPhoneBattery() &&
+                            (phoneBatteryPercentage != previousPhoneBatteryStatus?.batteryPercentage || previousPhoneBatteryStatus.isStale(System.currentTimeMillis()))) {
+                            invalidate()
+                        }
+                    }
+                } catch (t: Throwable) {
+                    Log.e("PixelWatchFace", "Error while parsing phone battery percentage from phone", t)
+                }
+            } else if (messageEvent.path == DATA_KEY_PREMIUM) {
+                try {
+                    handleIsPremiumCallback(messageEvent.data[0].toInt() == 1)
+                } catch (t: Throwable) {
+                    Log.e("PixelWatchFace", "Error while parsing premium status from phone", t)
+                    Toast.makeText(context, R.string.premium_error, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        private fun handleIsPremiumCallback(isPremium: Boolean) {
+            val wasPremium = storage.isUserPremium()
+            storage.setUserPremium(isPremium)
+
+            if( !wasPremium && isPremium ) {
+                Toast.makeText(context, R.string.premium_confirmation, Toast.LENGTH_LONG).show()
+            }
+
+            invalidate()
+        }
 
         private fun createWatchFaceDrawer(useAndroid12Style: Boolean): WatchFaceDrawer {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
@@ -207,10 +253,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
 
             complicationsSlots.setActiveComplicationLocations(drawer.getActiveComplicationLocations())
-
-            calendarBuggyComplicationsIds.clear()
-            galaxyWatch4HeartRateComplicationsIds.value = emptySet()
-            updateComplicationsProviderData()
 
             return drawer
         }
@@ -225,20 +267,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
-        private fun watchComplicationsDataProviderChanges() {
-            scope.launch {
-                watchState.isVisible
-                    .collectLatest { isVisible ->
-                        if (isVisible == true) {
-                            updateComplicationsProviderData()
-                        }
-                    }
-            }
-        }
-
         private fun watchGalaxyWatch4HRComplications() {
             scope.launch {
-                galaxyWatch4HeartRateComplicationsIds
+                complicationsSlots.galaxyWatch4HeartRateComplicationsLocationsFlow
                     .map { it.isNotEmpty() }
                     .distinctUntilChanged()
                     .collect { hasGalaxyWatch4HRComplication ->
@@ -251,90 +282,36 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
-        private fun watchComplicationsDataChangesAndSanitize() {
-            complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
-                scope.launch {
-                    var lastSanitizedData: ComplicationData? = null
-                    slot.complicationData.collect { complicationData ->
-                        if (complicationData != lastSanitizedData) {
-                            rawComplicationDataSparseArray.put(slot.id, complicationData)
-                        }
-
-                        complicationData.sanitizeIfNeeded(
-                            context,
-                            storage,
-                            slot.id,
-                            complicationProviderSparseArray.get(slot.id),
-                        )?.let { sanitizedData ->
-                            lastSanitizedData = sanitizedData
-
-                            ComplicationDataHelper.updateComplicationData(
-                                complicationSlotsManager,
-                                this@WatchFaceRenderer,
-                                slot.id,
-                                sanitizedData,
-                            )
+        private fun watchGalaxyWatch4CalendarComplications() {
+            scope.launch {
+                complicationsSlots.calendarBuggyComplicationsLocationsFlow
+                    .map { it.isNotEmpty() }
+                    .distinctUntilChanged()
+                    .collect { hasCalendarBuggyComplication ->
+                        if (hasCalendarBuggyComplication) {
+                            onGalaxyWatch4CalendarComplicationAdded()
+                        } else {
+                            onGalaxyWatch4CalendarComplicationRemoved()
                         }
                     }
-                }
             }
         }
 
-        private fun updateComplicationsProviderData() {
+        private fun watchComplicationSlotsRendererInvalidate() {
             scope.launch {
-                val results = complicationDataSourceInfoRetriever.retrieveComplicationDataSourceInfo(
-                    ComponentName(context, PixelMinimalWatchFace::class.java),
-                    ComplicationsSlots.COMPLICATION_IDS,
-                ) ?: return@launch
-
-                results.forEach { result ->
-                    val watchFaceComplicationId = result.slotId
-                    val complicationProviderInfo = result.info
-
-                    if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, watchFaceComplicationId: $watchFaceComplicationId -> provider: $complicationProviderInfo")
-
-                    val currentValue = complicationProviderSparseArray.get(watchFaceComplicationId, null)
-
-                    if(complicationProviderInfo != null) {
-                        complicationProviderSparseArray.put(watchFaceComplicationId, complicationProviderInfo)
-                    } else {
-                        complicationProviderSparseArray.remove(watchFaceComplicationId)
+                complicationsSlots.invalidateRendererEventFlow
+                    .collect {
+                        invalidate()
                     }
+            }
+        }
 
-                    val isCalendarBuggyComplication = complicationProviderInfo?.isSamsungCalendarBuggyProvider() == true
-                    if (isCalendarBuggyComplication) {
-                        if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, buggy calendar complication detected, id: $watchFaceComplicationId")
-                        calendarBuggyComplicationsIds.add(watchFaceComplicationId)
-                    } else {
-                        calendarBuggyComplicationsIds.remove(watchFaceComplicationId)
+        private fun watchComplicationsColorChanges() {
+            scope.launch {
+                storage.watchComplicationColors()
+                    .collect {
+                        complicationsSlots.updateComplicationDrawableStyles()
                     }
-
-                    val currentHRComplicationIds = galaxyWatch4HeartRateComplicationsIds.value
-                    val isGalaxyWatch4HeartRateComplication = complicationProviderInfo?.isSamsungHeartRateProvider() == true
-                    if (isGalaxyWatch4HeartRateComplication) {
-                        if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, GW4 HR complication detected, id: $watchFaceComplicationId")
-                        galaxyWatch4HeartRateComplicationsIds.value = HashSet(currentHRComplicationIds).apply {
-                            add(watchFaceComplicationId)
-                        }
-                    } else {
-                        galaxyWatch4HeartRateComplicationsIds.value = HashSet(currentHRComplicationIds).apply {
-                            remove(watchFaceComplicationId)
-                        }
-                    }
-
-                    // FIXME compare values not references
-                    if (currentValue != complicationProviderInfo) {
-                        if (DEBUG_LOGS) Log.d(TAG, "watchComplicationsDataProviderChanges, updating data from complicationId: $watchFaceComplicationId")
-
-                        onComplicationDataUpdate(
-                            watchFaceComplicationId,
-                            rawComplicationDataSparseArray.get(
-                                watchFaceComplicationId,
-                                ComplicationData.Builder(ComplicationData.TYPE_EMPTY).build(),
-                            )
-                        )
-                    }
-                }
             }
         }
 
@@ -350,26 +327,62 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
             galaxyWatch4HeartRateWatcherJob?.cancel()
             galaxyWatch4HeartRateWatcherJob = scope.launch {
-                galaxyWatch4HeartRateComplicationsIds
-                    .flatMapLatest { complicationIds ->
+                complicationsSlots.galaxyWatch4HeartRateComplicationsLocationsFlow
+                    .flatMapLatest { complicationLocations ->
                         context.watchSamsungHeartRateUpdates()
-                            .map { complicationIds }
+                            .map { complicationLocations }
                     }
-                    .collect { complicationIds ->
+                    .collect { complicationLocations ->
                         if (DEBUG_LOGS) Log.d(TAG, "galaxyWatch4HeartRateWatcher, new value received")
 
-                        for(complicationId in complicationIds) {
-                            if (DEBUG_LOGS) Log.d(TAG, "galaxyWatch4HeartRateWatcher, refreshing for complication $complicationId")
+                        for(complicationLocation in complicationLocations) {
+                            if (DEBUG_LOGS) Log.d(TAG, "galaxyWatch4HeartRateWatcher, refreshing for complication $complicationLocation")
 
-                            onComplicationDataUpdate(
-                                complicationId,
-                                rawComplicationDataSparseArray.get(
-                                    complicationId,
-                                    ComplicationData.Builder(ComplicationData.TYPE_EMPTY).build(),
-                                )
-                            )
+                            complicationsSlots.refreshDataAtLocation(complicationLocation)
                         }
                     }
+            }
+        }
+
+        private fun onGalaxyWatch4CalendarComplicationRemoved() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4CalendarComplicationRemoved")
+
+            galaxyWatch4CalendarWatcherJob?.cancel()
+            galaxyWatch4CalendarWatcherJob = null
+        }
+
+        private fun onGalaxyWatch4CalendarComplicationAdded() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4CalendarComplicationAdded")
+
+            galaxyWatch4CalendarWatcherJob?.cancel()
+            galaxyWatch4CalendarWatcherJob = scope.launch {
+                while(isActive) {
+                    complicationsSlots.calendarBuggyComplicationsLocationsFlow.value.forEach { location ->
+                        complicationsSlots.refreshDataAtLocation(location)
+                    }
+
+                    delay(HALF_HOUR_MS)
+                }
+            }
+        }
+
+        private fun syncPhoneBatteryStatus() {
+            scope.launch {
+                try {
+                    val capabilityInfo = withTimeout(5000) {
+                        Wearable.getCapabilityClient(context).getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await()
+                    }
+
+                    if (storage.showPhoneBattery()) {
+                        capabilityInfo.nodes.findBestNode()?.startPhoneBatterySync(context)
+                    } else {
+                        capabilityInfo.nodes.findBestNode()?.stopPhoneBatterySync(context)
+                    }
+
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    Log.e("PixelWatchFace", "Error while sending phone battery sync signal", t)
+                }
             }
         }
     }
@@ -1211,7 +1224,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
     }
 
     companion object {
-        private const val HALF_HOUR_MS = 1000*60*30
+        private const val HALF_HOUR_MS: Long = 1000*60*30
 
         fun isActive(context: Context): Boolean {
             val wallpaperManager = WallpaperManager.getInstance(context)
