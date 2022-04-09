@@ -61,7 +61,7 @@ const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 private const val DATA_KEY_PREMIUM = "premium"
 private const val DATA_KEY_BATTERY_STATUS_PERCENT = "/batterySync/batteryStatus"
 private const val THREE_DAYS_MS: Long = 1000 * 60 * 60 * 24 * 3L
-private const val THIRTY_MINS_MS: Long = 1000 * 60 * 30L
+const val THIRTY_MINS_MS: Long = 1000 * 60 * 30L
 private const val MINIMUM_COMPLICATION_UPDATE_INTERVAL_MS = 1000L
 val DEBUG_LOGS = BuildConfig.DEBUG
 private const val TAG = "PixelMinimalWatchFace"
@@ -162,7 +162,8 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private var galaxyWatch4CalendarWatcherJob: Job? = null
         private var galaxyWatch4HeartRateWatcherJob: Job? = null
 
-        private var phoneBatteryStatus: PhoneBatteryStatus = PhoneBatteryStatus.Unknown
+        private val batteryPhoneSyncHelper = BatteryPhoneSyncHelper(context, storage)
+        private val batteryWatchSyncHelper = BatteryWatchSyncHelper(context, storage, complicationsSlots)
 
         init {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
@@ -172,13 +173,37 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchGalaxyWatch4HRComplications()
             watchGalaxyWatch4CalendarComplications()
             watchComplicationSlotsRendererInvalidate()
+            watchPhoneBatteryHelperRendererInvalidate()
+            watchWatchBatteryHelperRendererInvalidate()
+            watchWeatherDataUpdates()
 
             Wearable.getDataClient(context).addListener(this)
             Wearable.getMessageClient(context).addListener(this)
-            syncPhoneBatteryStatus()
+
+            batteryPhoneSyncHelper.start()
+            batteryWatchSyncHelper.start()
+        }
+
+        private fun watchWeatherDataUpdates() {
+            scope.launch {
+                storage.watchShowWeather()
+                    .collect { showWeather ->
+                        complicationsSlots.setWeatherComplicationEnabled(showWeather)
+                    }
+            }
+
+            scope.launch {
+                complicationsSlots.weatherComplicationDataFlow
+                    .filterNotNull()
+                    .collect {
+                        invalidate()
+                    }
+            }
         }
 
         override fun onDestroy() {
+            batteryPhoneSyncHelper.stop()
+            batteryWatchSyncHelper.stop()
             scope.cancel()
 
             super.onDestroy()
@@ -189,48 +214,17 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
 
         override fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {
-            watchFaceDrawer.render(canvas, bounds, zonedDateTime)
+            showRatingNotificationIfNeeded()
+
+            watchFaceDrawer.render(
+                canvas,
+                bounds,
+                zonedDateTime,
+                if (storage.showWeather()) { complicationsSlots.weatherComplicationDataFlow.value } else { null },
+            )
         }
 
         override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {}
-
-        override fun onDataChanged(dataEvents: DataEventBuffer) {
-            for (event in dataEvents) {
-                if (event.type == DataEvent.TYPE_CHANGED) {
-                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
-
-                    if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
-                        handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
-                    }
-                }
-            }
-        }
-
-        override fun onMessageReceived(messageEvent: MessageEvent) {
-            if (messageEvent.path == DATA_KEY_BATTERY_STATUS_PERCENT) {
-                try {
-                    val phoneBatteryPercentage: Int = messageEvent.data[0].toInt()
-                    if (phoneBatteryPercentage in 0..100) {
-                        val previousPhoneBatteryStatus = phoneBatteryStatus as? PhoneBatteryStatus.DataReceived
-                        phoneBatteryStatus = PhoneBatteryStatus.DataReceived(phoneBatteryPercentage, System.currentTimeMillis())
-
-                        if (storage.showPhoneBattery() &&
-                            (phoneBatteryPercentage != previousPhoneBatteryStatus?.batteryPercentage || previousPhoneBatteryStatus.isStale(System.currentTimeMillis()))) {
-                            invalidate()
-                        }
-                    }
-                } catch (t: Throwable) {
-                    Log.e("PixelWatchFace", "Error while parsing phone battery percentage from phone", t)
-                }
-            } else if (messageEvent.path == DATA_KEY_PREMIUM) {
-                try {
-                    handleIsPremiumCallback(messageEvent.data[0].toInt() == 1)
-                } catch (t: Throwable) {
-                    Log.e("PixelWatchFace", "Error while parsing premium status from phone", t)
-                    Toast.makeText(context, R.string.premium_error, Toast.LENGTH_LONG).show()
-                }
-            }
-        }
 
         private fun handleIsPremiumCallback(isPremium: Boolean) {
             val wasPremium = storage.isUserPremium()
@@ -252,16 +246,17 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 RegularDigitalWatchFaceDrawer(context, storage)
             }
 
+            drawer.onCreate(context, watchState)
             complicationsSlots.setActiveComplicationLocations(drawer.getActiveComplicationLocations())
 
             return drawer
         }
 
-
         private fun watchWatchFaceDrawerChanges() {
             scope.launch {
                 storage.watchUseAndroid12Style()
                     .collect { useAndroid12Style ->
+                        watchFaceDrawer.onDestroy()
                         watchFaceDrawer = createWatchFaceDrawer(useAndroid12Style)
                     }
             }
@@ -302,6 +297,25 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 complicationsSlots.invalidateRendererEventFlow
                     .collect {
                         invalidate()
+                    }
+            }
+        }
+
+        private fun watchPhoneBatteryHelperRendererInvalidate() {
+            scope.launch {
+                batteryPhoneSyncHelper.invalidateRendererEventFlow
+                    .collect {
+                        invalidate()
+                    }
+            }
+        }
+
+        private fun watchWatchBatteryHelperRendererInvalidate() {
+            scope.launch {
+                batteryWatchSyncHelper.invalidateDrawerEventFlow
+                    .collect {
+                        watchFaceDrawer.onDestroy()
+                        watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
                     }
             }
         }
@@ -366,22 +380,42 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
-        private fun syncPhoneBatteryStatus() {
-            scope.launch {
+        private fun showRatingNotificationIfNeeded() {
+            if( !storage.hasRatingBeenDisplayed() &&
+                System.currentTimeMillis() - storage.getInstallTimestamp() > THREE_DAYS_MS ) {
+                storage.setRatingDisplayed(true)
+                context.showRatingNotification()
+            }
+        }
+
+        override fun onDataChanged(dataEvents: DataEventBuffer) {
+            for (event in dataEvents) {
+                if (event.type == DataEvent.TYPE_CHANGED) {
+                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+
+                    if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
+                        handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
+                    }
+                }
+            }
+        }
+
+        override fun onMessageReceived(messageEvent: MessageEvent) {
+            if (messageEvent.path == DATA_KEY_BATTERY_STATUS_PERCENT) {
                 try {
-                    val capabilityInfo = withTimeout(5000) {
-                        Wearable.getCapabilityClient(context).getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await()
+                    val phoneBatteryPercentage: Int = messageEvent.data[0].toInt()
+                    if (phoneBatteryPercentage in 0..100) {
+                        batteryPhoneSyncHelper.onPhoneBatteryStatusReceived(PhoneBatteryStatus.DataReceived(phoneBatteryPercentage, System.currentTimeMillis()))
                     }
-
-                    if (storage.showPhoneBattery()) {
-                        capabilityInfo.nodes.findBestNode()?.startPhoneBatterySync(context)
-                    } else {
-                        capabilityInfo.nodes.findBestNode()?.stopPhoneBatterySync(context)
-                    }
-
                 } catch (t: Throwable) {
-                    if (t is CancellationException) throw t
-                    Log.e("PixelWatchFace", "Error while sending phone battery sync signal", t)
+                    Log.e("PixelWatchFace", "Error while parsing phone battery percentage from phone", t)
+                }
+            } else if (messageEvent.path == DATA_KEY_PREMIUM) {
+                try {
+                    handleIsPremiumCallback(messageEvent.data[0].toInt() == 1)
+                } catch (t: Throwable) {
+                    Log.e("PixelWatchFace", "Error while parsing premium status from phone", t)
+                    Toast.makeText(context, R.string.premium_error, Toast.LENGTH_LONG).show()
                 }
             }
         }

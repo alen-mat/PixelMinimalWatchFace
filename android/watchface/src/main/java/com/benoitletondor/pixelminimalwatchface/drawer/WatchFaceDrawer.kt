@@ -23,6 +23,7 @@ import android.support.wearable.complications.ComplicationData
 import android.util.SparseArray
 import android.view.WindowInsets
 import androidx.wear.watchface.ComplicationSlot
+import androidx.wear.watchface.WatchState
 import com.benoitletondor.pixelminimalwatchface.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
@@ -31,8 +32,16 @@ import java.time.ZonedDateTime
 import java.util.*
 
 interface WatchFaceDrawer {
+    fun onCreate(context: Context, watchState: WatchState)
+    fun onDestroy()
+
     fun getActiveComplicationLocations(): Set<ComplicationLocation>
-    fun render(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime)
+    fun render(
+        canvas: Canvas,
+        bounds: Rect,
+        zonedDateTime: ZonedDateTime,
+        weatherComplicationData: ComplicationData?,
+    )
 
     fun initializeComplicationDrawables(drawableCallback: Drawable.Callback): IntArray
     fun onApplyWindowInsets(insets: WindowInsets)

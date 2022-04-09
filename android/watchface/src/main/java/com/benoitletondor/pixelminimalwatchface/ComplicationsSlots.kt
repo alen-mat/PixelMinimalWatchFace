@@ -1,5 +1,22 @@
+/*
+ *   Copyright 2022 Benoit LETONDOR
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package com.benoitletondor.pixelminimalwatchface
 
+import android.annotation.SuppressLint
+import android.content.ComponentName
 import android.content.Context
 import android.graphics.RectF
 import android.util.Log
@@ -11,6 +28,8 @@ import androidx.wear.watchface.ComplicationSlot
 import androidx.wear.watchface.ComplicationSlotsManager
 import androidx.wear.watchface.complications.ComplicationSlotBounds
 import androidx.wear.watchface.complications.DefaultComplicationDataSourcePolicy
+import androidx.wear.watchface.complications.SystemDataSources
+import androidx.wear.watchface.complications.SystemDataSources.Companion.NO_DATA_SOURCE
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.EmptyComplicationData
@@ -69,6 +88,17 @@ class ComplicationsSlots(
         complicationSlotId = RIGHT_COMPLICATION_ID,
     )
 
+    private var weatherDataWatcherJob: Job? = null
+    private var weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
+        complicationSlotId = WEATHER_COMPLICATION_ID,
+    )
+    private val weatherComplicationDataMutableFlow = MutableStateFlow<android.support.wearable.complications.ComplicationData?>(null)
+    val weatherComplicationDataFlow: StateFlow<android.support.wearable.complications.ComplicationData?> = weatherComplicationDataMutableFlow
+
+    private var batteryDataWatcherJob: Job? = null
+    private val watchBatteryLevelMutableFlow = MutableStateFlow<Int?>(null)
+    val watchBatteryLevelFlow: StateFlow<Int?> = watchBatteryLevelMutableFlow
+
     private val galaxyWatch4HeartRateComplicationsLocationsMutableFlow = MutableStateFlow<Set<ComplicationLocation>>(emptySet())
     val galaxyWatch4HeartRateComplicationsLocationsFlow: Flow<Set<ComplicationLocation>> = galaxyWatch4HeartRateComplicationsLocationsMutableFlow
 
@@ -83,115 +113,45 @@ class ComplicationsSlots(
         scope.cancel()
     }
 
-    private fun watchComplicationSlotsData() {
-        activeComplicationWatchingJobs.forEach { it.cancel() }
-        activeComplicationWatchingJobs.clear()
-
-        complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
-            if (slot.id.toComplicationLocation() !in activeSlots) {
-                return@forEach
-            }
-
-            val location = slot.id.toComplicationLocation() ?: return@forEach
-
-            val job = scope.launch {
-                var lastSanitizedData: ComplicationData? = null
-                slot.complicationData.collect { complicationData ->
-                    if (complicationData != lastSanitizedData) {
-                        rawComplicationDataSparseArray.put(slot.id, complicationData)
-
-                        updateGalaxyWatch4ComplicationSlots(
-                            location,
-                            complicationData,
-                            slot.id,
-                        )
-
-                        complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
-                            context,
-                            storage,
-                            slot.id,
-                            complicationData.dataSource,
-                        )?.let { sanitizedData ->
-                            lastSanitizedData = sanitizedData
-
-                            updateComplicationData(
-                                complicationSlotsManager,
-                                slot.id,
-                                sanitizedData,
-                            )
-
-                            invalidateRendererMutableEventFlow.emit(Unit)
-                        }
-                    }
-                }
-            }
-
-            activeComplicationWatchingJobs.add(job)
-        }
-    }
-
-    private fun updateGalaxyWatch4ComplicationSlots(
-        location: ComplicationLocation,
-        complicationData: ComplicationData,
-        complicationId: Int
-    ) {
-        updateGalaxyWatch4HRComplicationSlots(
-            location,
-            complicationData,
-            complicationId,
-        )
-
-        updateGalaxyWatch4CalendarComplicationSlots(
-            location,
-            complicationData,
-            complicationId,
-        )
-    }
-
-    private fun updateGalaxyWatch4HRComplicationSlots(
-        location: ComplicationLocation,
-        complicationData: ComplicationData,
-        complicationSlotId: Int,
-    ) {
-        val isGalaxyWatch4HeartRateComplication = complicationData.dataSource?.isSamsungHeartRateProvider() == true
-        if (isGalaxyWatch4HeartRateComplication && location !in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
-            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 HR complication detected, id: $complicationSlotId")
-
-            galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
-                add(location)
-            }
-        } else {
-            if (location in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
-                galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
-                    remove(location)
-                }
-            }
-        }
-    }
-
-    private fun updateGalaxyWatch4CalendarComplicationSlots(
-        location: ComplicationLocation,
-        complicationData: ComplicationData,
-        complicationSlotId: Int,
-    ) {
-        val isGalaxyWatch4CalendarComplication = complicationData.dataSource?.isSamsungCalendarBuggyProvider() == true
-        if (isGalaxyWatch4CalendarComplication && location !in calendarBuggyComplicationsLocationsMutableFlow.value) {
-            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 buggy calendar complication detected, id: $complicationSlotId")
-
-            calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
-                add(location)
-            }
-        } else {
-            if (location in calendarBuggyComplicationsLocationsMutableFlow.value) {
-                calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
-                    remove(location)
-                }
-            }
-        }
-    }
-
     fun createComplicationsSlots(): List<ComplicationSlot> {
         // TODO other slots
+
+        val batteryComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = BATTERY_COMPLICATION_ID,
+            canvasComplicationFactory = { watchState, listener ->
+                CanvasComplicationDrawable(
+                    ComplicationDrawable(),
+                    watchState,
+                    listener
+                )
+            },
+            supportedTypes = listOf(ComplicationType.SHORT_TEXT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(
+                SystemDataSources.DATA_SOURCE_WATCH_BATTERY,
+                ComplicationType.SHORT_TEXT,
+            ),
+            bounds = ComplicationSlotBounds(RectF(0f, 0f, 0f, 0f))
+        ).build()
+
+        val weatherProviderInfo = context.getWeatherProviderInfo()
+        val weatherComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = WEATHER_COMPLICATION_ID,
+            canvasComplicationFactory = { watchState, listener ->
+                CanvasComplicationDrawable(
+                    ComplicationDrawable(),
+                    watchState,
+                    listener
+                )
+            },
+            supportedTypes = listOf(ComplicationType.SHORT_TEXT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(
+                primaryDataSource = weatherProviderInfo?.let { ComponentName(it.appPackage, it.weatherProviderService) } ?: ComponentName("", ""),
+                primaryDataSourceDefaultType = ComplicationType.SHORT_TEXT,
+                systemDataSourceFallback = NO_DATA_SOURCE,
+                systemDataSourceFallbackDefaultType = ComplicationType.SHORT_TEXT,
+            ),
+            bounds = ComplicationSlotBounds(RectF(0f, 0f, 0f, 0f))
+        ).setEnabled(false).build()
 
         val leftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = LEFT_COMPLICATION_ID,
@@ -224,6 +184,8 @@ class ComplicationsSlots(
         ).build()
 
         return listOf(
+            batteryComplication,
+            weatherComplication,
             leftComplication,
             middleComplication,
             rightComplication,
@@ -284,6 +246,7 @@ class ComplicationsSlots(
 
         updateComplicationSetting()
         watchComplicationSlotsData()
+        watchWatchBatteryData()
     }
 
     fun refreshDataAtLocation(complicationLocation: ComplicationLocation) {
@@ -293,6 +256,103 @@ class ComplicationsSlots(
             complicationId,
             rawComplicationDataSparseArray.get(complicationId, EmptyComplicationData()),
         )
+    }
+
+    fun setWeatherComplicationEnabled(enabled: Boolean) {
+        if (!enabled) {
+            weatherDataWatcherJob?.cancel()
+            weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(WEATHER_COMPLICATION_ID)
+                .setEnabled(false)
+                .build()
+            updateComplicationSetting()
+        } else {
+            weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(WEATHER_COMPLICATION_ID)
+                .setEnabled(false)
+                .build()
+            updateComplicationSetting()
+
+            weatherDataWatcherJob?.cancel()
+            weatherDataWatcherJob = scope.launch {
+                complicationSlotsManager.complicationSlots[WEATHER_COMPLICATION_ID]?.let { complicationSlot ->
+                    complicationSlot.complicationData.collect { complicationData ->
+                        try {
+                            weatherComplicationDataMutableFlow.value = complicationData.asWireComplicationData()
+                            if (DEBUG_LOGS) Log.d("ComplicationsSlot", "weatherComplicationData received: $complicationData")
+                        } catch (e: Exception) {
+                            Log.e("ComplicationsSlot", "onComplicationDataUpdate, error while parsing weather data from complication", e)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun watchComplicationSlotsData() {
+        activeComplicationWatchingJobs.forEach { it.cancel() }
+        activeComplicationWatchingJobs.clear()
+
+        complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
+            if (slot.id.toComplicationLocation() !in activeSlots) {
+                return@forEach
+            }
+
+            val location = slot.id.toComplicationLocation() ?: return@forEach
+
+            val job = scope.launch {
+                var lastSanitizedData: ComplicationData? = null
+                slot.complicationData.collect { complicationData ->
+                    if (complicationData != lastSanitizedData) {
+                        rawComplicationDataSparseArray.put(slot.id, complicationData)
+
+                        updateGalaxyWatch4ComplicationSlots(
+                            location,
+                            complicationData,
+                            slot.id,
+                        )
+
+                        complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
+                            context,
+                            storage,
+                            slot.id,
+                            complicationData.dataSource,
+                        )?.let { sanitizedData ->
+                            lastSanitizedData = sanitizedData
+
+                            updateComplicationData(
+                                complicationSlotsManager,
+                                slot.id,
+                                sanitizedData,
+                            )
+
+                            invalidateRendererMutableEventFlow.emit(Unit)
+                        }
+                    }
+                }
+            }
+
+            activeComplicationWatchingJobs.add(job)
+        }
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun watchWatchBatteryData() {
+        batteryDataWatcherJob?.cancel()
+        batteryDataWatcherJob = scope.launch {
+            complicationSlotsManager.complicationSlots[BATTERY_COMPLICATION_ID]?.let { complicationSlot ->
+                complicationSlot.complicationData.collect { complicationData ->
+                    try {
+                        complicationData.asWireComplicationData().shortText?.getTextAt(context.resources, System.currentTimeMillis())?.let { text ->
+                            val batteryChargePercentage = text.substring(0, text.indexOf("%")).toInt()
+                            watchBatteryLevelMutableFlow.emit(batteryChargePercentage)
+
+                            if (DEBUG_LOGS) Log.d("ComplicationsSlot", "batteryComplicationData received: $batteryChargePercentage")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("ComplicationsSlot", "onComplicationDataUpdate, error while parsing battery data from complication", e)
+                    }
+                }
+            }
+        }
     }
 
     private fun updateComplicationSetting() {
@@ -309,6 +369,7 @@ class ComplicationsSlots(
                                 leftComplicationOption,
                                 middleComplicationOption,
                                 rightComplicationOption,
+                                weatherComplicationOption,
                             ),
                         ),
                     )
@@ -387,6 +448,66 @@ class ComplicationsSlots(
             ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
             ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
             ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
+        }
+    }
+
+    private fun updateGalaxyWatch4ComplicationSlots(
+        location: ComplicationLocation,
+        complicationData: ComplicationData,
+        complicationId: Int
+    ) {
+        updateGalaxyWatch4HRComplicationSlots(
+            location,
+            complicationData,
+            complicationId,
+        )
+
+        updateGalaxyWatch4CalendarComplicationSlots(
+            location,
+            complicationData,
+            complicationId,
+        )
+    }
+
+    private fun updateGalaxyWatch4HRComplicationSlots(
+        location: ComplicationLocation,
+        complicationData: ComplicationData,
+        complicationSlotId: Int,
+    ) {
+        val isGalaxyWatch4HeartRateComplication = complicationData.dataSource?.isSamsungHeartRateProvider() == true
+        if (isGalaxyWatch4HeartRateComplication && location !in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
+            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 HR complication detected, id: $complicationSlotId")
+
+            galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
+                add(location)
+            }
+        } else {
+            if (location in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
+                galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
+                    remove(location)
+                }
+            }
+        }
+    }
+
+    private fun updateGalaxyWatch4CalendarComplicationSlots(
+        location: ComplicationLocation,
+        complicationData: ComplicationData,
+        complicationSlotId: Int,
+    ) {
+        val isGalaxyWatch4CalendarComplication = complicationData.dataSource?.isSamsungCalendarBuggyProvider() == true
+        if (isGalaxyWatch4CalendarComplication && location !in calendarBuggyComplicationsLocationsMutableFlow.value) {
+            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 buggy calendar complication detected, id: $complicationSlotId")
+
+            calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
+                add(location)
+            }
+        } else {
+            if (location in calendarBuggyComplicationsLocationsMutableFlow.value) {
+                calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
+                    remove(location)
+                }
+            }
         }
     }
 

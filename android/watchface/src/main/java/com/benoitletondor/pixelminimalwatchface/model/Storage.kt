@@ -92,6 +92,7 @@ interface Storage {
     fun setShowSecondsRing(showSecondsRing: Boolean)
     fun showWeather(): Boolean
     fun setShowWeather(show: Boolean)
+    fun watchShowWeather(): Flow<Boolean>
     fun showWatchBattery(): Boolean
     fun setShowWatchBattery(show: Boolean)
     fun hasFeatureDropSummer2021NotificationBeenShown(): Boolean
@@ -331,6 +332,8 @@ class StorageImpl(
     override fun showWeather(): Boolean = showWeatherCache.get()
 
     override fun setShowWeather(show: Boolean) = showWeatherCache.set(show)
+
+    override fun watchShowWeather(): Flow<Boolean> = showWeatherCache.watchChanges()
 
     override fun showWatchBattery(): Boolean = showWatchBattery.get()
 
