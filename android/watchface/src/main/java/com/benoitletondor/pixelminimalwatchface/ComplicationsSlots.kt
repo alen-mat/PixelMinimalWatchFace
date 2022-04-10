@@ -18,7 +18,6 @@ package com.benoitletondor.pixelminimalwatchface
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.RectF
 import android.util.Log
@@ -70,24 +69,44 @@ class ComplicationsSlots(
     private val productSansRegularFont = ResourcesCompat.getFont(context, R.font.product_sans_regular)!!
     private val transparentColor = ContextCompat.getColor(context, R.color.transparent)
 
-    private val leftComplicationDrawable = ComplicationDrawable()
+    private val leftComplicationDrawable = ComplicationDrawable(context)
     private var leftComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = LEFT_COMPLICATION_ID,
     )
 
-    private val middleComplicationDrawable = ComplicationDrawable()
+    private val middleComplicationDrawable = ComplicationDrawable(context)
     private var middleComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = MIDDLE_COMPLICATION_ID,
     )
 
-    private val rightComplicationDrawable = ComplicationDrawable()
+    private val rightComplicationDrawable = ComplicationDrawable(context)
     private var rightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = RIGHT_COMPLICATION_ID,
     )
 
-    private val bottomComplicationDrawable = ComplicationDrawable()
+    private val bottomComplicationDrawable = ComplicationDrawable(context)
     private var bottomComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = BOTTOM_COMPLICATION_ID,
+    )
+
+    private val android12TopLeftComplicationDrawable = ComplicationDrawable(context)
+    private var android12TopLeftComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
+        complicationSlotId = ANDROID_12_TOP_LEFT_COMPLICATION_ID,
+    )
+
+    private val android12TopRightComplicationDrawable = ComplicationDrawable(context)
+    private var android12TopRightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
+        complicationSlotId = ANDROID_12_TOP_RIGHT_COMPLICATION_ID,
+    )
+
+    private val android12BottomLeftComplicationDrawable = ComplicationDrawable(context)
+    private var android12BottomLeftComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
+        complicationSlotId = ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID,
+    )
+
+    private val android12BottomRightComplicationDrawable = ComplicationDrawable(context)
+    private var android12BottomRightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
+        complicationSlotId = ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID,
     )
 
     private var weatherDataWatcherJob: Job? = null
@@ -118,13 +137,11 @@ class ComplicationsSlots(
     }
 
     fun createComplicationsSlots(): List<ComplicationSlot> {
-        // TODO other slots
-
         val batteryComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = BATTERY_COMPLICATION_ID,
             canvasComplicationFactory = { watchState, listener ->
                 CanvasComplicationDrawable(
-                    ComplicationDrawable(),
+                    ComplicationDrawable(context),
                     watchState,
                     listener
                 )
@@ -142,7 +159,7 @@ class ComplicationsSlots(
             id = WEATHER_COMPLICATION_ID,
             canvasComplicationFactory = { watchState, listener ->
                 CanvasComplicationDrawable(
-                    ComplicationDrawable(),
+                    ComplicationDrawable(context),
                     watchState,
                     listener
                 )
@@ -197,6 +214,46 @@ class ComplicationsSlots(
             bounds = defaultComplicationSlotBounds,
         ).build()
 
+        val android12TopLeftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = ANDROID_12_TOP_LEFT_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(
+                ComplicationLocation.ANDROID_12_TOP_LEFT.getComplicationDrawable(),
+            ),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.ANDROID_12_TOP_LEFT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = defaultComplicationSlotBounds,
+        ).build()
+
+        val android12TopRightComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = ANDROID_12_TOP_RIGHT_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(
+                ComplicationLocation.ANDROID_12_TOP_RIGHT.getComplicationDrawable(),
+            ),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.ANDROID_12_TOP_RIGHT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = defaultComplicationSlotBounds,
+        ).build()
+
+        val android12BottomLeftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(
+                ComplicationLocation.ANDROID_12_BOTTOM_LEFT.getComplicationDrawable(),
+            ),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.ANDROID_12_BOTTOM_LEFT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = defaultComplicationSlotBounds,
+        ).build()
+
+        val android12BottomRightComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
+            id = ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID,
+            canvasComplicationFactory = buildCanvasComplicationFactory(
+                ComplicationLocation.ANDROID_12_BOTTOM_RIGHT.getComplicationDrawable(),
+            ),
+            supportedTypes = getSupportedComplicationTypes(ComplicationLocation.ANDROID_12_BOTTOM_RIGHT),
+            defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
+            bounds = defaultComplicationSlotBounds,
+        ).build()
+
         return listOf(
             batteryComplication,
             weatherComplication,
@@ -204,6 +261,10 @@ class ComplicationsSlots(
             middleComplication,
             rightComplication,
             bottomComplication,
+            android12TopLeftComplication,
+            android12TopRightComplication,
+            android12BottomLeftComplication,
+            android12BottomRightComplication,
         )
     }
 
@@ -437,6 +498,10 @@ class ComplicationsSlots(
                                 middleComplicationOption,
                                 rightComplicationOption,
                                 bottomComplicationOption,
+                                android12TopLeftComplicationOption,
+                                android12TopRightComplicationOption,
+                                android12BottomLeftComplicationOption,
+                                android12BottomRightComplicationOption,
                                 weatherComplicationOption,
                             ),
                         ),
@@ -452,10 +517,10 @@ class ComplicationsSlots(
             ComplicationLocation.MIDDLE -> middleComplicationOption
             ComplicationLocation.RIGHT -> rightComplicationOption
             ComplicationLocation.BOTTOM -> bottomComplicationOption
-            ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
-            ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
-            ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
-            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
+            ComplicationLocation.ANDROID_12_TOP_LEFT -> android12TopLeftComplicationOption
+            ComplicationLocation.ANDROID_12_TOP_RIGHT -> android12TopRightComplicationOption
+            ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> android12BottomLeftComplicationOption
+            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> android12BottomRightComplicationOption
         }
 
         val builder = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(option.complicationSlotId).apply {
@@ -469,10 +534,10 @@ class ComplicationsSlots(
             ComplicationLocation.MIDDLE -> middleComplicationOption = builder.build()
             ComplicationLocation.RIGHT -> rightComplicationOption = builder.build()
             ComplicationLocation.BOTTOM -> bottomComplicationOption = builder.build()
-            ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
-            ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
-            ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
-            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
+            ComplicationLocation.ANDROID_12_TOP_LEFT -> android12TopLeftComplicationOption = builder.build()
+            ComplicationLocation.ANDROID_12_TOP_RIGHT -> android12TopRightComplicationOption = builder.build()
+            ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> android12BottomLeftComplicationOption = builder.build()
+            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> android12TopRightComplicationOption = builder.build()
         }
     }
 
@@ -541,10 +606,10 @@ class ComplicationsSlots(
         ComplicationLocation.MIDDLE -> middleComplicationDrawable
         ComplicationLocation.RIGHT -> rightComplicationDrawable
         ComplicationLocation.BOTTOM -> bottomComplicationDrawable
-        ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
+        ComplicationLocation.ANDROID_12_TOP_LEFT -> android12TopLeftComplicationDrawable
+        ComplicationLocation.ANDROID_12_TOP_RIGHT -> android12TopRightComplicationDrawable
+        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> android12BottomLeftComplicationDrawable
+        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> android12BottomRightComplicationDrawable
     }
 
     companion object {

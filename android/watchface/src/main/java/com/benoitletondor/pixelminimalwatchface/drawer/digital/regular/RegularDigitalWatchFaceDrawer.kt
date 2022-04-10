@@ -31,6 +31,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.*
 import kotlin.math.*
 
@@ -84,8 +85,8 @@ class RegularDigitalWatchFaceDrawer(
         isAntiAlias = true
     }
     private val distanceBetweenPhoneAndWatchBattery: Int = context.dpToPx(3)
-    private val timeFormatter24H = SimpleDateFormat("HH:mm", Locale.getDefault())
-    private val timeFormatter12H = SimpleDateFormat("h:mm", Locale.getDefault())
+    private val timeFormatter24H = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
+    private val timeFormatter12H = DateTimeFormatter.ofPattern("h:mm", Locale.getDefault())
     private val spaceBeforeWeather = context.dpToPx(5)
     private val topAndBottomMargins = context.getTopAndBottomMargins().toInt()
     private val weatherAndBatteryIconColorFilterDimmed: ColorFilter = PorterDuffColorFilter(dateAndBatteryColorDimmed, PorterDuff.Mode.SRC_IN)
