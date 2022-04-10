@@ -32,6 +32,8 @@ import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.EmptyComplicationData
 import androidx.wear.watchface.complications.rendering.CanvasComplicationDrawable
 import androidx.wear.watchface.complications.rendering.ComplicationDrawable
+import androidx.wear.watchface.complications.rendering.CustomCanvasComplicationDrawable
+import androidx.wear.watchface.complications.rendering.CustomComplicationDrawable
 import androidx.wear.watchface.style.CurrentUserStyleRepository
 import androidx.wear.watchface.style.UserStyleSetting
 import androidx.wear.watchface.style.WatchFaceLayer
@@ -71,42 +73,42 @@ class ComplicationsSlots(
     private val productSansRegularFont = ResourcesCompat.getFont(context, R.font.product_sans_regular)!!
     private val transparentColor = ContextCompat.getColor(context, R.color.transparent)
 
-    private val leftComplicationDrawable = ComplicationDrawable(context)
+    private val leftComplicationDrawable = CustomComplicationDrawable(context)
     private var leftComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = LEFT_COMPLICATION_ID,
     )
 
-    private val middleComplicationDrawable = ComplicationDrawable(context)
+    private val middleComplicationDrawable = CustomComplicationDrawable(context)
     private var middleComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = MIDDLE_COMPLICATION_ID,
     )
 
-    private val rightComplicationDrawable = ComplicationDrawable(context)
+    private val rightComplicationDrawable = CustomComplicationDrawable(context)
     private var rightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = RIGHT_COMPLICATION_ID,
     )
 
-    private val bottomComplicationDrawable = ComplicationDrawable(context)
+    private val bottomComplicationDrawable = CustomComplicationDrawable(context)
     private var bottomComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = BOTTOM_COMPLICATION_ID,
     )
 
-    private val android12TopLeftComplicationDrawable = ComplicationDrawable(context)
+    private val android12TopLeftComplicationDrawable = CustomComplicationDrawable(context)
     private var android12TopLeftComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = ANDROID_12_TOP_LEFT_COMPLICATION_ID,
     )
 
-    private val android12TopRightComplicationDrawable = ComplicationDrawable(context)
+    private val android12TopRightComplicationDrawable = CustomComplicationDrawable(context)
     private var android12TopRightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = ANDROID_12_TOP_RIGHT_COMPLICATION_ID,
     )
 
-    private val android12BottomLeftComplicationDrawable = ComplicationDrawable(context)
+    private val android12BottomLeftComplicationDrawable = CustomComplicationDrawable(context)
     private var android12BottomLeftComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = ANDROID_12_BOTTOM_LEFT_COMPLICATION_ID,
     )
 
-    private val android12BottomRightComplicationDrawable = ComplicationDrawable(context)
+    private val android12BottomRightComplicationDrawable = CustomComplicationDrawable(context)
     private var android12BottomRightComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay(
         complicationSlotId = ANDROID_12_BOTTOM_RIGHT_COMPLICATION_ID,
     )
@@ -276,9 +278,9 @@ class ComplicationsSlots(
         )
     }
 
-    private fun buildCanvasComplicationFactory(complicationDrawable: ComplicationDrawable): CanvasComplicationFactory {
+    private fun buildCanvasComplicationFactory(complicationDrawable: CustomComplicationDrawable): CanvasComplicationFactory {
         return CanvasComplicationFactory { watchState, listener ->
-            CanvasComplicationDrawable(
+            CustomCanvasComplicationDrawable(
                 complicationDrawable,
                 watchState,
                 listener
@@ -621,7 +623,7 @@ class ComplicationsSlots(
         }
     }
 
-    private fun ComplicationLocation.getComplicationDrawable(): ComplicationDrawable = when(this) {
+    private fun ComplicationLocation.getComplicationDrawable(): CustomComplicationDrawable = when(this) {
         ComplicationLocation.LEFT -> leftComplicationDrawable
         ComplicationLocation.MIDDLE -> middleComplicationDrawable
         ComplicationLocation.RIGHT -> rightComplicationDrawable
