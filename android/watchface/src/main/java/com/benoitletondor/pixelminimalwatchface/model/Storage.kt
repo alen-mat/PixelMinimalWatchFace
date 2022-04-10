@@ -92,6 +92,7 @@ interface Storage {
     fun watchDateAndBatterySize(): Flow<Int>
     fun showSecondsRing(): Boolean
     fun setShowSecondsRing(showSecondsRing: Boolean)
+    fun watchShowSecondsRing(): Flow<Boolean>
     fun showWeather(): Boolean
     fun setShowWeather(show: Boolean)
     fun watchShowWeather(): Flow<Boolean>
@@ -333,6 +334,8 @@ class StorageImpl(
     override fun showSecondsRing(): Boolean = showSecondsRingCache.get()
 
     override fun setShowSecondsRing(showSecondsRing: Boolean) = showSecondsRingCache.set(showSecondsRing)
+
+    override fun watchShowSecondsRing(): Flow<Boolean> = showSecondsRingCache.watchChanges()
 
     override fun showWeather(): Boolean = showWeatherCache.get()
 

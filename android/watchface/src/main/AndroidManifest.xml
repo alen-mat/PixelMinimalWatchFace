@@ -65,29 +65,37 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".settings.WidgetConfigurationActivity" />
+        <activity
+            android:name=".settings.WidgetConfigurationActivity"
+            android:theme="@style/Theme.Default"
+            android:exported="false" />
 
         <activity
             android:name=".settings.phonebattery.PhoneBatteryConfigurationActivity"
-            android:theme="@style/Theme.Default"/>
+            android:theme="@style/Theme.Default"
+            android:exported="false"/>
 
         <activity
             android:name=".settings.phonebattery.troubleshoot.PhoneBatterySyncTroubleshootActivity"
             android:label="@string/phone_battery_configuration_troubleshoot_title"
-            android:theme="@style/Theme.Default"/>
+            android:theme="@style/Theme.Default"
+            android:exported="false"/>
 
         <activity
             android:name=".FeatureDropActivity"
             android:label="@string/feature_drop_2021_notification_title"
-            android:theme="@style/Theme.Default"/>
+            android:theme="@style/Theme.Default"
+            android:exported="false"/>
 
         <activity
             android:name=".helper.FullBrightnessActivity"
-            android:theme="@style/TransparentTheme"/>
+            android:theme="@style/TransparentTheme"
+            android:exported="false"/>
 
-        <meta-data
-            android:name="com.google.android.wearable.standalone"
-            android:value="true" />
+        <activity
+            android:name=".rating.FeedbackActivity"
+            android:theme="@style/Theme.Default"
+            android:exported="false"/>
 
         <service
             android:name=".PixelMinimalWatchFace"
@@ -128,11 +136,10 @@
             </intent-filter>
         </receiver>
 
-        <activity android:name=".rating.FeedbackActivity" />
-
         <meta-data
-            android:name="com.google.android.gms.version"
-            android:value="@integer/google_play_services_version" />
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
     </application>
 
 </manifest>
