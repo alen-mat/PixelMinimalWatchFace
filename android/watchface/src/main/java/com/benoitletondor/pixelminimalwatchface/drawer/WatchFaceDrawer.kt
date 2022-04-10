@@ -18,6 +18,7 @@ package com.benoitletondor.pixelminimalwatchface.drawer
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.support.wearable.complications.ComplicationData
+import androidx.wear.watchface.TapEvent
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import java.time.ZonedDateTime
 
@@ -25,6 +26,11 @@ interface WatchFaceDrawer {
     fun onDestroy()
 
     fun getActiveComplicationLocations(): Set<ComplicationLocation>
+
+    fun isTapOnWeather(tapEvent: TapEvent): Boolean
+    fun isTapOnCenterOfScreen(tapEvent: TapEvent): Boolean
+    fun isTapOnBattery(tapEvent: TapEvent): Boolean
+
     fun draw(
         canvas: Canvas,
         bounds: Rect,

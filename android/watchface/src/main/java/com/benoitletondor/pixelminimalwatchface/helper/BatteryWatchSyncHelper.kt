@@ -21,7 +21,6 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
 import com.benoitletondor.pixelminimalwatchface.*
-import com.benoitletondor.pixelminimalwatchface.model.Storage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.filterNotNull
 
 class BatteryWatchSyncHelper(
     private val context: Context,
-    private val storage: Storage,
     private val complicationsSlots: ComplicationsSlots,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -55,6 +53,7 @@ class BatteryWatchSyncHelper(
         dataFreshnessJob = scope.launch {
             while (isActive) {
                 delay(60000)
+                Log.d(TAG, "awake")
 
                 val lastWatchBatteryStatus = watchBatteryStatus
                 if (Device.isSamsungGalaxyWatch &&
@@ -75,7 +74,7 @@ class BatteryWatchSyncHelper(
     }
 
     private fun ensureBatteryDataIsUpToDateOrReload(lastWatchBatteryStatus: WatchBatteryStatus.DataReceived) {
-        if (DEBUG_LOGS) Log.d("BatteryWatchSyncHelper", "ensureBatteryDataIsUpToDateOrReload comparing $lastWatchBatteryStatus")
+        if (DEBUG_LOGS) Log.d(TAG, "ensureBatteryDataIsUpToDateOrReload comparing $lastWatchBatteryStatus")
 
         try {
             val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
@@ -86,7 +85,7 @@ class BatteryWatchSyncHelper(
                 level * 100 / scale.toFloat()
             }?.toInt()
 
-            if (DEBUG_LOGS) Log.d("BatteryWatchSyncHelper", "ensureBatteryDataIsUpToDateOrReload current value $maybeCurrentBatteryPercentage")
+            if (DEBUG_LOGS) Log.d(TAG, "ensureBatteryDataIsUpToDateOrReload current value $maybeCurrentBatteryPercentage")
 
             if (maybeCurrentBatteryPercentage != null &&
                 maybeCurrentBatteryPercentage != lastWatchBatteryStatus.batteryPercentage) {
@@ -94,18 +93,22 @@ class BatteryWatchSyncHelper(
                 if (lastWatchBatteryStatus.shouldRefresh(maybeCurrentBatteryPercentage)) {
                     watchBatteryStatus = WatchBatteryStatus.Unknown
 
-                    if (DEBUG_LOGS) Log.d("BatteryWatchSyncHelper", "ensureBatteryDataIsUpToDateOrReload, refreshing")
+                    if (DEBUG_LOGS) Log.d(TAG, "ensureBatteryDataIsUpToDateOrReload, refreshing")
 
                     scope.launch {
                         invalidateDrawerMutableEventFlow.emit(Unit)
                     }
                 } else {
-                    if (DEBUG_LOGS) Log.d("BatteryWatchSyncHelper", "ensureBatteryDataIsUpToDateOrReload ignoring cause not stale yet")
+                    if (DEBUG_LOGS) Log.d(TAG, "ensureBatteryDataIsUpToDateOrReload ignoring cause not stale yet")
                     lastWatchBatteryStatus.markAsStale()
                 }
             }
         } catch (e: Exception) {
-            Log.e("BatteryWatchSyncHelper", "ensureBatteryDataIsUpToDateOrReload: Error while comparing data", e)
+            Log.e(TAG, "ensureBatteryDataIsUpToDateOrReload: Error while comparing data", e)
         }
+    }
+
+    companion object {
+        private const val TAG = "BatteryWatchSyncHelper"
     }
 }

@@ -22,6 +22,7 @@ import android.support.wearable.complications.ComplicationData
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
+import androidx.wear.watchface.TapEvent
 import androidx.wear.watchface.WatchState
 import com.benoitletondor.pixelminimalwatchface.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
@@ -126,6 +127,37 @@ class RegularDigitalWatchFaceDrawer(
         ComplicationLocation.RIGHT,
         ComplicationLocation.BOTTOM,
     )
+
+    override fun isTapOnWeather(tapEvent: TapEvent): Boolean {
+        val drawingState = drawingState
+        if( !storage.showWeather() ||
+            !storage.isUserPremium() ||
+            drawingState !is RegularDrawerDrawingState.CacheAvailable ) {
+            return false
+        }
+
+        val displayRect = drawingState.getWeatherDisplayRect() ?: return false
+        return displayRect.contains(tapEvent.xPos, tapEvent.yPos)
+    }
+
+    override fun isTapOnCenterOfScreen(tapEvent: TapEvent): Boolean {
+        val drawingState = drawingState as? RegularDrawerDrawingState.CacheAvailable ?: return false
+
+        val centerRect = Rect(
+            (drawingState.screenWidth * 0.25f).toInt(),
+            (drawingState.screenHeight * 0.25f).toInt(),
+            (drawingState.screenWidth * 0.75f).toInt(),
+            (drawingState.screenHeight * 0.75f).toInt()
+        )
+
+        return centerRect.contains(tapEvent.xPos, tapEvent.yPos)
+    }
+
+    override fun isTapOnBattery(tapEvent: TapEvent): Boolean {
+        val drawingState = drawingState as? RegularDrawerDrawingState.CacheAvailable ?: return false
+
+        return drawingState.tapIsOnBattery(tapEvent.xPos, tapEvent.yPos)
+    }
 
     override fun draw(
         canvas: Canvas,

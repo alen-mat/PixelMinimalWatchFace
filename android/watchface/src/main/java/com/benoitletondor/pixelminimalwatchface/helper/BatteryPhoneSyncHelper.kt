@@ -53,6 +53,7 @@ class BatteryPhoneSyncHelper(
 
             while (isActive) {
                 delay(60000)
+                Log.d(TAG, "awake")
 
                 val lastRequestTimestamp = lastPhoneSyncRequestTimestamp
                 if( storage.showPhoneBattery() &&
@@ -85,6 +86,8 @@ class BatteryPhoneSyncHelper(
 
     private suspend fun Context.syncPhoneBatteryStatus(storage: Storage) {
         try {
+            Log.d(TAG, "syncPhoneBatteryStatus. showPhoneBattery: ${storage.showPhoneBattery()}")
+            
             val capabilityInfo = withTimeout(5000) {
                 Wearable.getCapabilityClient(this@syncPhoneBatteryStatus).getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await()
             }
@@ -94,14 +97,14 @@ class BatteryPhoneSyncHelper(
             } else {
                 capabilityInfo.nodes.findBestNode()?.stopPhoneBatterySync(this@syncPhoneBatteryStatus)
             }
-
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            Log.e("PixelWatchFace", "Error while sending phone battery sync signal", t)
+            Log.e(TAG, "Error while sending phone battery sync signal", t)
         }
     }
 
     companion object {
+        private const val TAG = "BatteryPhoneSyncHelper"
         private const val THIRTY_MINS_MS: Long = 1000 * 60 * 30L
     }
 }

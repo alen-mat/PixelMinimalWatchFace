@@ -17,6 +17,7 @@ package com.benoitletondor.pixelminimalwatchface
 
 import android.app.*
 import android.content.*
+import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.os.Build
@@ -30,6 +31,7 @@ import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDi
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION
 import com.benoitletondor.pixelminimalwatchface.model.Storage
+import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -61,6 +63,8 @@ class PixelMinimalWatchFace : WatchFaceService() {
     }
 
     override fun onDestroy() {
+        if (DEBUG_LOGS) Log.d(TAG, "onDestroy")
+        
         scope.cancel()
         complicationsSlots.onDestroy()
 
@@ -109,7 +113,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
         return WatchFace(
             watchFaceType = WatchFaceType.DIGITAL,
             renderer = renderer,
-        )
+        ).apply {
+            setTapListener(renderer)
+        }
     }
 
     private class WatchFaceRenderer(
@@ -127,7 +133,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         canvasType = canvasType,
         interactiveDrawModeUpdateDelayMillis = 60000L,
         clearWithBackgroundTintBeforeRenderingHighlightLayer = false,
-    ), DataClient.OnDataChangedListener, MessageClient.OnMessageReceivedListener {
+    ), DataClient.OnDataChangedListener, MessageClient.OnMessageReceivedListener, WatchFace.TapListener {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
         private var watchFaceDrawer: WatchFaceDrawer
@@ -136,7 +142,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private var galaxyWatch4HeartRateWatcherJob: Job? = null
 
         private val batteryPhoneSyncHelper = BatteryPhoneSyncHelper(context, storage)
-        private val batteryWatchSyncHelper = BatteryWatchSyncHelper(context, storage, complicationsSlots)
+        private val batteryWatchSyncHelper = BatteryWatchSyncHelper(context, complicationsSlots)
+
+        private var lastTapOnCenterOfScreenEventTimestamp: Long = 0
 
         init {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
@@ -193,6 +201,49 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
 
         override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {}
+
+        override fun onTapEvent(
+            tapType: Int,
+            tapEvent: TapEvent,
+            complicationSlot: ComplicationSlot?
+        ) {
+            if (tapType != TapType.UP) {
+                return
+            }
+
+            if (DEBUG_LOGS) Log.d(TAG, "onTapEvent: $tapEvent")
+
+            when {
+                complicationSlot != null -> {
+                    lastTapOnCenterOfScreenEventTimestamp = 0
+                }
+                watchFaceDrawer.isTapOnWeather(tapEvent) -> {
+                    val weatherProviderInfo = context.getWeatherProviderInfo() ?: return
+                    context.openActivity(weatherProviderInfo.appPackage, weatherProviderInfo.weatherActivityName)
+                    lastTapOnCenterOfScreenEventTimestamp = 0
+                }
+                watchFaceDrawer.isTapOnBattery(tapEvent) -> {
+                    lastTapOnCenterOfScreenEventTimestamp = 0
+                    if (storage.showPhoneBattery() &&
+                        batteryPhoneSyncHelper.phoneBatteryStatus.isStale(System.currentTimeMillis())) {
+                        context.startActivity(Intent(context, PhoneBatteryConfigurationActivity::class.java).apply {
+                            flags = FLAG_ACTIVITY_NEW_TASK
+                        })
+                    }
+                }
+                watchFaceDrawer.isTapOnCenterOfScreen(tapEvent) -> {
+                    val eventTime = System.currentTimeMillis()
+                    if( lastTapOnCenterOfScreenEventTimestamp == 0L || eventTime - lastTapOnCenterOfScreenEventTimestamp > 400 ) {
+                        lastTapOnCenterOfScreenEventTimestamp = eventTime
+                    } else {
+                        lastTapOnCenterOfScreenEventTimestamp = 0
+                        context.startActivity(Intent(context, FullBrightnessActivity::class.java).apply {
+                            flags = FLAG_ACTIVITY_NEW_TASK
+                        })
+                    }
+                }
+            }
+        }
 
         private fun handleIsPremiumCallback(isPremium: Boolean) {
             val wasPremium = storage.isUserPremium()
