@@ -45,6 +45,8 @@ import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplica
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.ZonedDateTime
+import java.util.*
+import kotlin.collections.HashSet
 
 class ComplicationsSlots(
     private val context: Context,
@@ -510,7 +512,7 @@ class ComplicationsSlots(
                     set(
                         UserStyleSetting.Id(COMPLICATIONS_SETTING_ID),
                         UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotsOption(
-                            id = UserStyleSetting.Option.Id(COMPLICATIONS_SLOT_OPTION_ID),
+                            id = UserStyleSetting.Option.Id(UUID.randomUUID().toString()),
                             displayName = "",
                             icon = null,
                             complicationSlotOverlays = listOf(
@@ -640,7 +642,6 @@ class ComplicationsSlots(
         private const val TAG = "ComplicationsSlot"
 
         private const val COMPLICATIONS_SETTING_ID = "complications:setting"
-        private const val COMPLICATIONS_SLOT_OPTION_ID = "complications:slotOption"
 
         private const val LEFT_COMPLICATION_ID = 100
         private const val RIGHT_COMPLICATION_ID = 101
@@ -757,7 +758,7 @@ class ComplicationsSlots(
             ),
             complicationConfig = listOf(
                 UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotsOption(
-                    id = UserStyleSetting.Option.Id(COMPLICATIONS_SLOT_OPTION_ID),
+                    id = UserStyleSetting.Option.Id(UUID.randomUUID().toString()),
                     displayName = "",
                     icon = null,
                     complicationSlotOverlays = emptyList(),

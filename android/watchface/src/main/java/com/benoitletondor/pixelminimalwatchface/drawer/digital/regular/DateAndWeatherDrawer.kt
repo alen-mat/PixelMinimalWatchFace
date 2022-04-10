@@ -87,7 +87,7 @@ class DateAndWeatherDrawerImpl(
             DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_ABBREV_WEEKDAY
         }
 
-        val dateText = DateUtils.formatDateTime(context, date.toEpochSecond() * 1000, dateFormat).capitalize()
+        val dateText = DateUtils.formatDateTime(context, date.toInstant().toEpochMilli(), dateFormat).capitalize()
         val dateTextLength = datePaint.measureText(dateText)
         val dateXOffset = if( isUserPremium && weatherComplicationData != null ) {
             val weatherText = weatherComplicationData.shortText
@@ -124,7 +124,7 @@ class DateAndWeatherDrawerImpl(
         weatherIconPaint: Paint,
     ): Float {
         val weatherIconSize = dateHeight
-        val weatherTextString = weatherText.getTextAt(context.resources, date.toEpochSecond() * 1000).toString()
+        val weatherTextString = weatherText.getTextAt(context.resources, date.toInstant().toEpochMilli()).toString()
         val weatherTextLength = datePaint.measureText(weatherTextString)
         val dateFontMetrics = datePaint.fontMetrics
 

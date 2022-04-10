@@ -176,12 +176,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
             showRatingNotificationIfNeeded()
 
-            if (storage.isUserPremium()) {
-                if (storage.showComplicationsInAmbientMode() || watchState.isAmbient.value != true) {
-                    complicationsSlots.render(canvas, zonedDateTime, renderParameters)
-                }
-            }
-
             watchFaceDrawer.draw(
                 canvas,
                 bounds,
@@ -190,6 +184,12 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 if (storage.showPhoneBattery()) { batteryPhoneSyncHelper.phoneBatteryStatus.getBatteryText(System.currentTimeMillis()) } else { null },
                 if (storage.showWatchBattery()) { batteryWatchSyncHelper.watchBatteryStatus.getValue() } else { null },
             )
+
+            if (storage.isUserPremium()) {
+                if (storage.showComplicationsInAmbientMode() || watchState.isAmbient.value != true) {
+                    complicationsSlots.render(canvas, zonedDateTime, renderParameters)
+                }
+            }
         }
 
         override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {}
