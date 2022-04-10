@@ -47,7 +47,7 @@ class WidgetConfigRecyclerViewAdapter(
     private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
     private var widgetViewHolder: WidgetViewHolder? = null
     private var colorViewHolder: ColorViewHolder? = null
-    private var showColor = true
+    private var showColor = false
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         return when(viewType) {

@@ -174,7 +174,7 @@ class ComplicationsSlots(
             },
             supportedTypes = listOf(ComplicationType.SHORT_TEXT),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(
-                primaryDataSource = weatherProviderInfo?.let { ComponentName(it.appPackage, it.weatherProviderService) } ?: ComponentName("", ""),
+                primaryDataSource = ComponentName(weatherProviderInfo?.appPackage ?: "", weatherProviderInfo?.weatherProviderService ?: ""),
                 primaryDataSourceDefaultType = ComplicationType.SHORT_TEXT,
                 systemDataSourceFallback = NO_DATA_SOURCE,
                 systemDataSourceFallbackDefaultType = ComplicationType.SHORT_TEXT,
@@ -288,23 +288,23 @@ class ComplicationsSlots(
 
     @SuppressLint("RestrictedApi")
     private fun watchComplicationDataAndColorChanges() {
-        scope.launch {
-            complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
-                val location = slot.id.toComplicationLocation() ?: return@forEach
-                val drawable = location.getComplicationDrawable()
+        complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
+            val location = slot.id.toComplicationLocation() ?: return@forEach
+            val drawable = location.getComplicationDrawable()
 
-                drawable.activeStyle.titleSize = titleSize
-                drawable.ambientStyle.titleSize = titleSize
-                drawable.activeStyle.titleColor = complicationTitleColor
-                drawable.ambientStyle.titleColor = complicationTitleColor
-                drawable.ambientStyle.iconColor = dateAndBatteryColorDimmed
-                drawable.activeStyle.setTextTypeface(productSansRegularFont)
-                drawable.ambientStyle.setTextTypeface(productSansRegularFont)
-                drawable.activeStyle.setTitleTypeface(productSansRegularFont)
-                drawable.ambientStyle.setTitleTypeface(productSansRegularFont)
-                drawable.activeStyle.borderColor = transparentColor
-                drawable.ambientStyle.borderColor = transparentColor
+            drawable.activeStyle.titleSize = titleSize
+            drawable.ambientStyle.titleSize = titleSize
+            drawable.activeStyle.titleColor = complicationTitleColor
+            drawable.ambientStyle.titleColor = complicationTitleColor
+            drawable.ambientStyle.iconColor = dateAndBatteryColorDimmed
+            drawable.activeStyle.setTextTypeface(productSansRegularFont)
+            drawable.ambientStyle.setTextTypeface(productSansRegularFont)
+            drawable.activeStyle.setTitleTypeface(productSansRegularFont)
+            drawable.ambientStyle.setTitleTypeface(productSansRegularFont)
+            drawable.activeStyle.borderColor = transparentColor
+            drawable.ambientStyle.borderColor = transparentColor
 
+            scope.launch {
                 slot.complicationData
                     .combine(
                         storage.watchComplicationColors()
@@ -385,27 +385,21 @@ class ComplicationsSlots(
     fun setWeatherComplicationEnabled(enabled: Boolean) {
         if (DEBUG_LOGS) Log.d(TAG, "setWeatherComplicationEnabled: $enabled")
 
-        if (!enabled) {
-            weatherDataWatcherJob?.cancel()
-            weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(WEATHER_COMPLICATION_ID)
-                .setEnabled(false)
-                .build()
-            updateComplicationSetting()
-        } else {
-            weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(WEATHER_COMPLICATION_ID)
-                .setEnabled(false)
-                .build()
-            updateComplicationSetting()
+        weatherDataWatcherJob?.cancel()
+        weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(WEATHER_COMPLICATION_ID)
+            .setEnabled(enabled)
+            .build()
+        updateComplicationSetting()
 
-            weatherDataWatcherJob?.cancel()
+        if (enabled) {
             weatherDataWatcherJob = scope.launch {
                 complicationSlotsManager.complicationSlots[WEATHER_COMPLICATION_ID]?.let { complicationSlot ->
                     complicationSlot.complicationData.collect { complicationData ->
                         try {
                             weatherComplicationDataMutableFlow.value = complicationData.asWireComplicationData()
-                            if (DEBUG_LOGS) Log.d("ComplicationsSlot", "weatherComplicationData received: $complicationData")
+                            if (DEBUG_LOGS) Log.d(TAG, "weatherComplicationData received: $complicationData")
                         } catch (e: Exception) {
-                            Log.e("ComplicationsSlot", "onComplicationDataUpdate, error while parsing weather data from complication", e)
+                            Log.e(TAG, "onComplicationDataUpdate, error while parsing weather data from complication", e)
                         }
                     }
                 }
