@@ -15,24 +15,30 @@
  */
 package com.benoitletondor.pixelminimalwatchface.rating
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
-import android.os.Handler
-import android.os.ResultReceiver
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.wear.remote.interactions.RemoteActivityHelper
 import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.R
+import com.benoitletondor.pixelminimalwatchface.helper.await
+import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.launch
 
 /**
  * Rating popup that ask user for feedback and redirect them to the PlayStore
  *
  * @author Benoit LETONDOR
  */
-class RatingPopup(private val activity: Activity) {
+class RatingPopup(private val activity: AppCompatActivity) {
 
     /**
      * Show the rating popup to the user
@@ -89,27 +95,37 @@ class RatingPopup(private val activity: Activity) {
                 sendIntent.putExtra(Intent.EXTRA_TEXT, body)
                 sendIntent.putExtra(Intent.EXTRA_SUBJECT, subject)
 
-                RemoteIntent.startRemoteActivity(
-                    activity,
-                    sendIntent,
-                    object : ResultReceiver(Handler()) {
-                        override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                            if (resultCode == RemoteIntent.RESULT_OK) {
-                                ConfirmationOverlay()
-                                    .setOnAnimationFinishedListener {
-                                        finishListener()
-                                    }
-                                    .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                                    .setDuration(3000)
-                                    .setMessage(activity.getString(R.string.open_phone_url_android_device) as CharSequence)
-                                    .showOn(activity)
-                            } else if (resultCode == RemoteIntent.RESULT_FAILED) {
-                                Toast.makeText(activity, activity.resources.getString(R.string.rating_feedback_send_error), Toast.LENGTH_SHORT).show()
-                                finishListener()
-                            }
+                activity.lifecycleScope.launch {
+                    val phoneNodes = Wearable.getNodeClient(activity).connectedNodes.await()
+                    val phoneNode = phoneNodes.firstOrNull { it.isNearby }
+                    val phoneNodeId = phoneNode?.id
+
+                    if (phoneNodeId != null) {
+                        try {
+                            RemoteActivityHelper(activity, Dispatchers.IO.asExecutor()).startRemoteActivity(
+                                sendIntent,
+                                phoneNodeId,
+                            ).await()
+
+                            ConfirmationOverlay()
+                                .setOnAnimationFinishedListener {
+                                    finishListener()
+                                }
+                                .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
+                                .setDuration(3000)
+                                .setMessage(activity.getString(R.string.open_phone_url_android_device) as CharSequence)
+                                .showOn(activity)
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+
+                            Toast.makeText(activity, activity.resources.getString(R.string.rating_feedback_send_error), Toast.LENGTH_SHORT).show()
+                            finishListener()
                         }
+                    } else {
+                        Toast.makeText(activity, activity.resources.getString(R.string.rating_feedback_send_error), Toast.LENGTH_SHORT).show()
+                        finishListener()
                     }
-                )
+                }
             }
             .setOnCancelListener {
                 finishListener()

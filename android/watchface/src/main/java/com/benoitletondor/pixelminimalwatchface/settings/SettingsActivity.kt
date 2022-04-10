@@ -15,31 +15,46 @@
  */
 package com.benoitletondor.pixelminimalwatchface.settings
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.ResultReceiver
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.wear.phone.interactions.PhoneTypeHelper
+import androidx.wear.remote.interactions.RemoteActivityHelper
+import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
 import com.benoitletondor.pixelminimalwatchface.BuildConfig.COMPANION_APP_PLAYSTORE_URL
 import com.benoitletondor.pixelminimalwatchface.Injection
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.databinding.ActivityComplicationConfigBinding
 import com.benoitletondor.pixelminimalwatchface.getWeatherProviderInfo
+import com.benoitletondor.pixelminimalwatchface.helper.await
 import com.benoitletondor.pixelminimalwatchface.helper.openActivity
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
+import com.google.android.gms.wearable.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.launch
 
-class SettingsActivity : Activity() {
+class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChangedListener {
     private lateinit var adapter: ComplicationConfigRecyclerViewAdapter
     private lateinit var storage: Storage
 
     private lateinit var binding: ActivityComplicationConfigBinding
+
+    private lateinit var remoteActivityHelper: RemoteActivityHelper
+    private lateinit var capabilityClient: CapabilityClient
+    private lateinit var nodeClient: NodeClient
+
+    private var companionNode: Node? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +62,11 @@ class SettingsActivity : Activity() {
         setContentView(binding.root)
 
         storage = Injection.storage(this)
+
+        remoteActivityHelper = RemoteActivityHelper(this, Dispatchers.IO.asExecutor())
+        capabilityClient = Wearable.getCapabilityClient(this)
+        nodeClient = Wearable.getNodeClient(this)
+
         adapter = ComplicationConfigRecyclerViewAdapter(this, storage, {
             openAppOnPhone()
         }, { use24hTimeFormat ->
@@ -127,13 +147,31 @@ class SettingsActivity : Activity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+
+        capabilityClient.addListener(this, BuildConfig.COMPANION_APP_CAPABILITY)
+    }
+
+    override fun onStop() {
+        capabilityClient.removeListener(this, BuildConfig.COMPANION_APP_CAPABILITY)
+
+        super.onStop()
+    }
+
     override fun onDestroy() {
         adapter.onDestroy()
 
         super.onDestroy()
     }
 
+    override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
+        companionNode = capabilityInfo.nodes.firstOrNull { it.isNearby }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
         if( requestCode == COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE ) {
             adapter.weatherComplicationPermissionFinished()
         } else if( requestCode == COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE ) {
@@ -170,111 +208,120 @@ class SettingsActivity : Activity() {
     }
 
     private fun openAppOnPhone() {
-        if ( PhoneDeviceType.getPhoneDeviceType(applicationContext) == PhoneDeviceType.DEVICE_TYPE_ANDROID ) {
-            // Create Remote Intent to open Play Store listing of app on remote device.
+        if ( PhoneTypeHelper.getPhoneDeviceType(applicationContext) == PhoneTypeHelper.DEVICE_TYPE_ANDROID ) {
             val intentAndroid = Intent(Intent.ACTION_VIEW)
                 .addCategory(Intent.CATEGORY_BROWSABLE)
                 .setData(Uri.parse("pixelminimalwatchface://open"))
                 .setPackage(BuildConfig.APPLICATION_ID)
 
-            RemoteIntent.startRemoteActivity(
-                applicationContext,
-                intentAndroid,
-                object : ResultReceiver(Handler()) {
-                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                        if (resultCode == RemoteIntent.RESULT_OK) {
-                            ConfirmationOverlay()
-                                .setFinishedAnimationListener {
-                                    finish()
-                                }
-                                .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                                .setDuration(3000)
-                                .setMessage(getString(R.string.open_phone_url_android_device))
-                                .showOn(this@SettingsActivity)
-                        } else {
-                            openAppInStoreOnPhone()
-                        }
+            val companionNodeId = companionNode?.id
+            if (companionNodeId != null) {
+                lifecycleScope.launch {
+                    try {
+                        remoteActivityHelper.startRemoteActivity(
+                            intentAndroid,
+                            companionNodeId,
+                        ).await()
+
+                        ConfirmationOverlay()
+                            .setOnAnimationFinishedListener {
+                                finish()
+                            }
+                            .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
+                            .setDuration(3000)
+                            .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
+                            .showOn(this@SettingsActivity)
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        openAppInStoreOnPhone()
                     }
                 }
-            )
 
-            return
+            } else {
+                openAppInStoreOnPhone()
+            }
         }
 
         openAppInStoreOnPhone()
     }
 
     private fun openAppForDonationOnPhone() {
-        if ( PhoneDeviceType.getPhoneDeviceType(applicationContext) == PhoneDeviceType.DEVICE_TYPE_ANDROID ) {
-            // Create Remote Intent to open Play Store listing of app on remote device.
+        if ( PhoneTypeHelper.getPhoneDeviceType(applicationContext) == PhoneTypeHelper.DEVICE_TYPE_ANDROID ) {
             val intentAndroid = Intent(Intent.ACTION_VIEW)
                 .addCategory(Intent.CATEGORY_BROWSABLE)
                 .setData(Uri.parse("pixelminimalwatchface://donate"))
                 .setPackage(BuildConfig.APPLICATION_ID)
 
-            RemoteIntent.startRemoteActivity(
-                applicationContext,
-                intentAndroid,
-                object : ResultReceiver(Handler()) {
-                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                        if (resultCode == RemoteIntent.RESULT_OK) {
-                            ConfirmationOverlay()
-                                .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                                .setDuration(3000)
-                                .setMessage(getString(R.string.open_phone_url_android_device))
-                                .showOn(this@SettingsActivity)
-                        } else {
-                            openAppInStoreOnPhone(finish = false)
-                        }
+            val companionNodeId = companionNode?.id
+            if (companionNodeId != null) {
+                lifecycleScope.launch {
+                    try {
+                        remoteActivityHelper.startRemoteActivity(
+                            intentAndroid,
+                            companionNodeId,
+                        ).await()
+
+                        ConfirmationOverlay()
+                            .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
+                            .setDuration(3000)
+                            .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
+                            .showOn(this@SettingsActivity)
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        openAppInStoreOnPhone(finish = false)
                     }
                 }
-            )
-
-            return
+            } else {
+                openAppInStoreOnPhone(finish = false)
+            }
+        } else {
+            openAppInStoreOnPhone(finish = false)
         }
-
-        openAppInStoreOnPhone(finish = false)
     }
 
     private fun openAppInStoreOnPhone(finish: Boolean = true) {
-        when (PhoneDeviceType.getPhoneDeviceType(applicationContext)) {
-            PhoneDeviceType.DEVICE_TYPE_ANDROID -> {
+        when (PhoneTypeHelper.getPhoneDeviceType(applicationContext)) {
+            PhoneTypeHelper.DEVICE_TYPE_ANDROID -> {
                 // Create Remote Intent to open Play Store listing of app on remote device.
                 val intentAndroid = Intent(Intent.ACTION_VIEW)
                     .addCategory(Intent.CATEGORY_BROWSABLE)
                     .setData(Uri.parse(COMPANION_APP_PLAYSTORE_URL))
 
-                RemoteIntent.startRemoteActivity(
-                    applicationContext,
-                    intentAndroid,
-                    object : ResultReceiver(Handler()) {
-                        override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                            if (resultCode == RemoteIntent.RESULT_OK) {
-                                ConfirmationOverlay()
-                                    .setFinishedAnimationListener {
-                                        if( finish ) {
-                                            finish()
-                                        }
+                lifecycleScope.launch {
+                    val phoneNodes = nodeClient.connectedNodes.await()
+                    val phoneNode = phoneNodes.firstOrNull { it.isNearby }
+                    val phoneNodeId = phoneNode?.id
+
+                    if (phoneNodeId != null) {
+                        try {
+                            remoteActivityHelper.startRemoteActivity(
+                                intentAndroid,
+                                phoneNodeId,
+                            ).await()
+
+                            ConfirmationOverlay()
+                                .setOnAnimationFinishedListener {
+                                    if (finish) {
+                                        finish()
                                     }
-                                    .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                                    .setDuration(3000)
-                                    .setMessage(getString(R.string.open_phone_url_android_device))
-                                    .showOn(this@SettingsActivity)
-                            } else if (resultCode == RemoteIntent.RESULT_FAILED) {
-                                ConfirmationOverlay()
-                                    .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                                    .setDuration(3000)
-                                    .setMessage(getString(R.string.open_phone_url_android_device_failure))
-                                    .showOn(this@SettingsActivity)
-                            }
+                                }
+                                .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
+                                .setDuration(3000)
+                                .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
+                                .showOn(this@SettingsActivity)
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
                         }
+                    } else {
+                        Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
                     }
-                )
+                }
             }
-            PhoneDeviceType.DEVICE_TYPE_IOS -> {
+            PhoneTypeHelper.DEVICE_TYPE_IOS -> {
                 Toast.makeText(this@SettingsActivity, R.string.open_phone_url_ios_device, Toast.LENGTH_LONG).show()
             }
-            PhoneDeviceType.DEVICE_TYPE_ERROR_UNKNOWN -> {
+            PhoneTypeHelper.DEVICE_TYPE_UNKNOWN, PhoneTypeHelper.DEVICE_TYPE_ERROR -> {
                 Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
             }
         }
