@@ -237,9 +237,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     .distinctUntilChanged()
                     .collect { hasGalaxyWatch4HRComplication ->
                         if (hasGalaxyWatch4HRComplication) {
-                            onGalaxyWatch4HeartRateComplicationAdded()
+                            onGalaxyWatch4HeartRateComplicationActive()
                         } else {
-                            onGalaxyWatch4HeartRateComplicationRemoved()
+                            onGalaxyWatch4HeartRateComplicationInactive()
                         }
                     }
             }
@@ -252,9 +252,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     .distinctUntilChanged()
                     .collect { hasCalendarBuggyComplication ->
                         if (hasCalendarBuggyComplication) {
-                            onGalaxyWatch4CalendarComplicationAdded()
+                            onGalaxyWatch4CalendarComplicationActive()
                         } else {
-                            onGalaxyWatch4CalendarComplicationRemoved()
+                            onGalaxyWatch4CalendarComplicationInactive()
                         }
                     }
             }
@@ -305,15 +305,15 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
-        private fun onGalaxyWatch4HeartRateComplicationRemoved() {
-            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationRemoved")
+        private fun onGalaxyWatch4HeartRateComplicationInactive() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationInactive")
 
             galaxyWatch4HeartRateWatcherJob?.cancel()
             galaxyWatch4HeartRateWatcherJob = null
         }
 
-        private fun onGalaxyWatch4HeartRateComplicationAdded() {
-            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationAdded")
+        private fun onGalaxyWatch4HeartRateComplicationActive() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationActive")
 
             galaxyWatch4HeartRateWatcherJob?.cancel()
             galaxyWatch4HeartRateWatcherJob = scope.launch {
@@ -334,15 +334,15 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
-        private fun onGalaxyWatch4CalendarComplicationRemoved() {
-            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4CalendarComplicationRemoved")
+        private fun onGalaxyWatch4CalendarComplicationInactive() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4CalendarComplicationInactive")
 
             galaxyWatch4CalendarWatcherJob?.cancel()
             galaxyWatch4CalendarWatcherJob = null
         }
 
-        private fun onGalaxyWatch4CalendarComplicationAdded() {
-            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4CalendarComplicationAdded")
+        private fun onGalaxyWatch4CalendarComplicationActive() {
+            if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4CalendarComplicationActive")
 
             galaxyWatch4CalendarWatcherJob?.cancel()
             galaxyWatch4CalendarWatcherJob = scope.launch {

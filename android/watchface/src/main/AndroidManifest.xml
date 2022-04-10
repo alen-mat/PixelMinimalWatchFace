@@ -55,6 +55,7 @@
         <activity
             android:name=".settings.SettingsActivity"
             android:label="@string/complication_config"
+            android:theme="@style/Theme.Default"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.benoitletondor.pixelminimalwatchface.CONFIG_COMPLICATION_SIMPLE"/>
@@ -68,17 +69,17 @@
 
         <activity
             android:name=".settings.phonebattery.PhoneBatteryConfigurationActivity"
-            android:theme="@style/Theme.AppCompat.NoActionBar"/>
+            android:theme="@style/Theme.Default"/>
 
         <activity
             android:name=".settings.phonebattery.troubleshoot.PhoneBatterySyncTroubleshootActivity"
-            android:label="@string/phone_battery_configuration_troubleshoot_title"/>
+            android:label="@string/phone_battery_configuration_troubleshoot_title"
+            android:theme="@style/Theme.Default"/>
 
         <activity
             android:name=".FeatureDropActivity"
-            android:label="@string/feature_drop_2021_notification_title"/>
-
-        <activity android:name="android.support.wearable.complications.ComplicationHelperActivity"/>
+            android:label="@string/feature_drop_2021_notification_title"
+            android:theme="@style/Theme.Default"/>
 
         <activity
             android:name=".helper.FullBrightnessActivity"

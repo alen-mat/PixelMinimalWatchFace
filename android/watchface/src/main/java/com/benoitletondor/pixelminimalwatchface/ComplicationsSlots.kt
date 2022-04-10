@@ -127,16 +127,22 @@ class ComplicationsSlots(
     val calendarBuggyComplicationsLocationsFlow: StateFlow<Set<ComplicationLocation>> = calendarBuggyComplicationsLocationsMutableFlow
 
     fun onCreate(complicationSlotsManager: ComplicationSlotsManager) {
+        if (DEBUG_LOGS) Log.d(TAG, "onCreate")
+
         this.complicationSlotsManager = complicationSlotsManager
 
         watchComplicationDataAndColorChanges()
     }
 
     fun onDestroy() {
+        if (DEBUG_LOGS) Log.d(TAG, "onDestroy")
+
         scope.cancel()
     }
 
     fun createComplicationsSlots(): List<ComplicationSlot> {
+        if (DEBUG_LOGS) Log.d(TAG, "createComplicationsSlots")
+
         val batteryComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = BATTERY_COMPLICATION_ID,
             canvasComplicationFactory = { watchState, listener ->
@@ -335,6 +341,8 @@ class ComplicationsSlots(
     }
 
     fun updateComplicationBounds(complicationLocation: ComplicationLocation, bounds: RectF) {
+        if (DEBUG_LOGS) Log.d(TAG, "updateComplicationBounds at location: $complicationLocation, bounds: $bounds")
+
         complicationLocation.editComplicationOptions {
             it.setComplicationSlotBounds(ComplicationSlotBounds(bounds))
         }
@@ -343,6 +351,8 @@ class ComplicationsSlots(
     }
 
     fun setActiveComplicationLocations(activeLocations: Set<ComplicationLocation>) {
+        if (DEBUG_LOGS) Log.d(TAG, "setActiveComplicationLocations: $activeLocations")
+
         for(location in ComplicationLocation.values()) {
             location.editComplicationOptions {
                 it.setEnabled(location in activeLocations)
@@ -360,6 +370,8 @@ class ComplicationsSlots(
     }
 
     fun refreshDataAtLocation(complicationLocation: ComplicationLocation) {
+        if (DEBUG_LOGS) Log.d(TAG, "refreshDataAtLocation: $complicationLocation")
+
         val complicationId = complicationLocation.getComplicationId()
         updateComplicationData(
             complicationSlotsManager,
@@ -369,6 +381,8 @@ class ComplicationsSlots(
     }
 
     fun setWeatherComplicationEnabled(enabled: Boolean) {
+        if (DEBUG_LOGS) Log.d(TAG, "setWeatherComplicationEnabled: $enabled")
+
         if (!enabled) {
             weatherDataWatcherJob?.cancel()
             weatherComplicationOption = UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotOverlay.Builder(WEATHER_COMPLICATION_ID)
@@ -430,6 +444,8 @@ class ComplicationsSlots(
                 var lastSanitizedData: ComplicationData? = null
                 slot.complicationData.collect { complicationData ->
                     if (complicationData != lastSanitizedData) {
+                        if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData: $location, data: $complicationData")
+
                         rawComplicationDataSparseArray.put(slot.id, complicationData)
 
                         updateGalaxyWatch4ComplicationSlots(
@@ -444,6 +460,8 @@ class ComplicationsSlots(
                             location,
                             complicationData.dataSource,
                         )?.let { sanitizedData ->
+                            if (DEBUG_LOGS) Log.d(TAG, "sanitizeForSamsungGalaxyWatch: $location")
+
                             lastSanitizedData = sanitizedData
 
                             updateComplicationData(
@@ -473,10 +491,10 @@ class ComplicationsSlots(
                             val batteryChargePercentage = text.substring(0, text.indexOf("%")).toInt()
                             watchBatteryLevelMutableFlow.emit(batteryChargePercentage)
 
-                            if (DEBUG_LOGS) Log.d("ComplicationsSlots", "batteryComplicationData received: $batteryChargePercentage")
+                            if (DEBUG_LOGS) Log.d(TAG, "batteryComplicationData received: $batteryChargePercentage")
                         }
                     } catch (e: Exception) {
-                        Log.e("ComplicationsSlots", "onComplicationDataUpdate, error while parsing battery data from complication", e)
+                        Log.e(TAG, "onComplicationDataUpdate, error while parsing battery data from complication", e)
                     }
                 }
             }
@@ -484,6 +502,8 @@ class ComplicationsSlots(
     }
 
     private fun updateComplicationSetting() {
+        if (DEBUG_LOGS) Log.d(TAG, "updateComplicationSetting")
+
         currentUserStyleRepository.updateUserStyle(
             currentUserStyleRepository.userStyle.value
                 .toMutableUserStyle().apply {
@@ -566,13 +586,15 @@ class ComplicationsSlots(
     ) {
         val isGalaxyWatch4HeartRateComplication = complicationData.dataSource?.isSamsungHeartRateProvider() == true
         if (isGalaxyWatch4HeartRateComplication && location !in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
-            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 HR complication detected, id: $complicationSlotId")
+            if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 HR complication detected, id: $complicationSlotId")
 
             galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
                 add(location)
             }
         } else {
             if (location in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
+                if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 HR complication removed, id: $complicationSlotId")
+
                 galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value).apply {
                     remove(location)
                 }
@@ -587,13 +609,15 @@ class ComplicationsSlots(
     ) {
         val isGalaxyWatch4CalendarComplication = complicationData.dataSource?.isSamsungCalendarBuggyProvider() == true
         if (isGalaxyWatch4CalendarComplication && location !in calendarBuggyComplicationsLocationsMutableFlow.value) {
-            if (DEBUG_LOGS) Log.d("PixelMinimalWatchFace", "watchComplicationSlotsData, GW4 buggy calendar complication detected, id: $complicationSlotId")
+            if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 buggy calendar complication detected, id: $complicationSlotId")
 
             calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
                 add(location)
             }
         } else {
             if (location in calendarBuggyComplicationsLocationsMutableFlow.value) {
+                if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 buggy calendar complication removed, id: $complicationSlotId")
+
                 calendarBuggyComplicationsLocationsMutableFlow.value = HashSet(calendarBuggyComplicationsLocationsMutableFlow.value).apply {
                     remove(location)
                 }
@@ -613,6 +637,8 @@ class ComplicationsSlots(
     }
 
     companion object {
+        private const val TAG = "ComplicationsSlot"
+
         private const val COMPLICATIONS_SETTING_ID = "complications:setting"
         private const val COMPLICATIONS_SLOT_OPTION_ID = "complications:slotOption"
 

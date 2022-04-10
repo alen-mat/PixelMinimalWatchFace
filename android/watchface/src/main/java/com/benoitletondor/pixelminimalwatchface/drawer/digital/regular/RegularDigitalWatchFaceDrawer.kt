@@ -29,6 +29,7 @@ import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -106,7 +107,9 @@ class RegularDigitalWatchFaceDrawer(
                 storage.watchWidgetsSize()
             ) { _, _, _ ->
                 true // We don't care about the value here
-            }.collect {
+            }
+            .drop(1) // Ignore first value
+            .collect {
                 drawingState = when(val currentDrawingState = drawingState) {
                     is RegularDrawerDrawingState.CacheAvailable -> currentDrawingState.buildCache()
                     is RegularDrawerDrawingState.NoCacheAvailable -> currentDrawingState.buildCache()
