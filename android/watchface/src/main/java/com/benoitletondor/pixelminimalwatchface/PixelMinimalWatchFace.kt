@@ -96,7 +96,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
     ): WatchFace {
         if (DEBUG_LOGS) Log.d(TAG, "createWatchFace. Security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
 
-        // Creates class that renders the watch face.
         val renderer = WatchFaceRenderer(
             context = applicationContext,
             surfaceHolder = surfaceHolder,
@@ -107,7 +106,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
             complicationsSlots = complicationsSlots,
         )
 
-        // Creates the watch face.
         return WatchFace(
             watchFaceType = WatchFaceType.DIGITAL,
             renderer = renderer,
@@ -144,7 +142,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
 
             watchWatchFaceDrawerChanges()
-            watchComplicationsColorChanges()
             watchGalaxyWatch4HRComplications()
             watchGalaxyWatch4CalendarComplications()
             watchComplicationSlotsRendererInvalidate()
@@ -212,9 +209,10 @@ class PixelMinimalWatchFace : WatchFaceService() {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
 
             val drawer = if (useAndroid12Style) {
-                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots) // FIXME Android12DigitalWatchFaceDrawer(context, storage)
+                // FIXME Android12DigitalWatchFaceDrawer(context, storage)
+                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
             } else {
-                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots)
+                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
             }
 
             complicationsSlots.setActiveComplicationLocations(drawer.getActiveComplicationLocations())
@@ -303,15 +301,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     .filterNotNull()
                     .collect {
                         invalidate()
-                    }
-            }
-        }
-
-        private fun watchComplicationsColorChanges() {
-            scope.launch {
-                storage.watchComplicationColors()
-                    .collect {
-                        complicationsSlots.updateComplicationDrawableStyles()
                     }
             }
         }

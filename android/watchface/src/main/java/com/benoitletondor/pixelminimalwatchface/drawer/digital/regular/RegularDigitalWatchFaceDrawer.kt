@@ -18,11 +18,7 @@ package com.benoitletondor.pixelminimalwatchface.drawer.digital.regular
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
-import android.graphics.drawable.Drawable
 import android.support.wearable.complications.ComplicationData
-import android.util.Log
-import android.util.SparseArray
-import android.view.WindowInsets
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
@@ -32,7 +28,6 @@ import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
@@ -45,6 +40,7 @@ class RegularDigitalWatchFaceDrawer(
     private val storage: Storage,
     private val watchState: WatchState,
     private val complicationsSlots: ComplicationsSlots,
+    private val invalidateRenderer: () -> Unit,
 ) : WatchFaceDrawer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -75,8 +71,6 @@ class RegularDigitalWatchFaceDrawer(
     private val timeColorDimmed: Int = ContextCompat.getColor(context, R.color.face_time_dimmed)
     @ColorInt
     private val dateAndBatteryColorDimmed: Int = ContextCompat.getColor(context, R.color.face_date_dimmed)
-    @ColorInt
-    private val complicationTitleColor: Int = ContextCompat.getColor(context, R.color.complication_title_color)
     private val wearOSLogo: Bitmap = ContextCompat.getDrawable(context, R.drawable.ic_wear_os_logo)!!.toBitmap()
     private val wearOSLogoAmbient: Bitmap = ContextCompat.getDrawable(context, R.drawable.ic_wear_os_logo_ambient)!!.toBitmap()
     private val batteryIconPaint: Paint = Paint()
@@ -92,44 +86,35 @@ class RegularDigitalWatchFaceDrawer(
     private val distanceBetweenPhoneAndWatchBattery: Int = context.dpToPx(3)
     private val timeFormatter24H = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val timeFormatter12H = SimpleDateFormat("h:mm", Locale.getDefault())
-    private var currentTimeSize = storage.getTimeSize()
-    private var currentDateAndBatterySize = storage.getDateAndBatterySize()
-    private var currentWidgetsSize = storage.getWidgetsSize()
     private val spaceBeforeWeather = context.dpToPx(5)
     private val topAndBottomMargins = context.getTopAndBottomMargins().toInt()
     private val weatherAndBatteryIconColorFilterDimmed: ColorFilter = PorterDuffColorFilter(dateAndBatteryColorDimmed, PorterDuff.Mode.SRC_IN)
 
     init {
-        scope.launch {
-            storage.watchComplicationColors()
-                .combine(complicationsSlots.watchComplicationData(ComplicationLocation.BOTTOM)) { colors, data ->
-                    Pair(
-                        colors,
-                        data
-                    )
-                }
-                .collect { (complicationColors, complicationData) ->
-                    val primaryComplicationColor = complicationColors.getPrimaryColorForComplication(ComplicationLocation.BOTTOM)
-                    val complicationDrawable = complicationsSlots.getComplicationDrawable(ComplicationLocation.BOTTOM)
-                    val data = complicationData.asWireComplicationData()
-                    if( data.icon != null ) {
-                        if( data.longTitle != null ) {
-                            complicationDrawable.activeStyle.textColor = primaryComplicationColor
-                            complicationDrawable.ambientStyle.textColor = dateAndBatteryColorDimmed
-                        } else {
-                            complicationDrawable.activeStyle.textColor = complicationTitleColor
-                            complicationDrawable.ambientStyle.textColor = complicationTitleColor
-                        }
-                    } else {
-                        complicationDrawable.activeStyle.textColor = primaryComplicationColor
-                        complicationDrawable.ambientStyle.textColor = dateAndBatteryColorDimmed
-                    }
-                }
-        }
+        watchSizesChanges()
     }
 
     override fun onDestroy() {
         scope.cancel()
+    }
+
+    private fun watchSizesChanges() {
+        scope.launch {
+            combine(
+                storage.watchTimeSize(),
+                storage.watchDateAndBatterySize(),
+                storage.watchWidgetsSize()
+            ) { _, _, _ ->
+                true // We don't care about the value here
+            }.collect {
+                drawingState = when(val currentDrawingState = drawingState) {
+                    is RegularDrawerDrawingState.CacheAvailable -> currentDrawingState.buildCache()
+                    is RegularDrawerDrawingState.NoCacheAvailable -> currentDrawingState.buildCache()
+                }
+
+                invalidateRenderer()
+            }
+        }
     }
 
     override fun getActiveComplicationLocations(): Set<ComplicationLocation> = setOf(
@@ -157,11 +142,6 @@ class RegularDigitalWatchFaceDrawer(
 
         val currentDrawingState = drawingState
         if( currentDrawingState is RegularDrawerDrawingState.NoCacheAvailable ) {
-            drawingState = currentDrawingState.buildCache()
-        } else if( currentDrawingState is RegularDrawerDrawingState.CacheAvailable &&
-            (currentTimeSize != storage.getTimeSize() ||
-                    currentDateAndBatterySize != storage.getDateAndBatterySize() ||
-                    currentWidgetsSize != storage.getWidgetsSize()) ) {
             drawingState = currentDrawingState.buildCache()
         }
 
@@ -241,9 +221,6 @@ class RegularDigitalWatchFaceDrawer(
             dateYOffset + dateTextHeight / 2,
         )
 
-        currentTimeSize = timeSize
-        currentDateAndBatterySize = dateAndBatterySize
-
         val batteryBottomY = screenHeight - watchState.chinHeight - topAndBottomMargins
 
         return RegularDrawerDrawingState.CacheAvailable(
@@ -268,7 +245,7 @@ class RegularDigitalWatchFaceDrawer(
     ): ComplicationsDrawingCache {
         val wearOsImage = wearOSLogo
 
-        currentWidgetsSize = storage.getWidgetsSize()
+        val currentWidgetsSize = storage.getWidgetsSize()
         val widgetsScaleFactor = fontDisplaySizeToScaleFactor(currentWidgetsSize, android12Layout = false)
 
         val sizeOfComplication = if(context.resources.configuration.isScreenRound) { ((screenWidth / 4.5) * widgetsScaleFactor).toInt() } else { (min(topBottom.toInt() - topAndBottomMargins - context.dpToPx(2), (screenWidth / 3.5).toInt()) * widgetsScaleFactor).toInt() }

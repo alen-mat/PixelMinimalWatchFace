@@ -64,6 +64,7 @@ class ComplicationsSlots(
     val invalidateRendererEventFlow: Flow<Unit> = invalidateRendererMutableEventFlow
 
     private val titleSize = context.resources.getDimensionPixelSize(R.dimen.complication_title_size)
+    private val textSize: Int = context.resources.getDimensionPixelSize(R.dimen.complication_text_size)
     private val complicationTitleColor = ContextCompat.getColor(context, R.color.complication_title_color)
     private val dateAndBatteryColorDimmed = ContextCompat.getColor(context, R.color.face_date_dimmed)
     private val productSansRegularFont = ResourcesCompat.getFont(context, R.font.product_sans_regular)!!
@@ -108,6 +109,8 @@ class ComplicationsSlots(
 
     fun onCreate(complicationSlotsManager: ComplicationSlotsManager) {
         this.complicationSlotsManager = complicationSlotsManager
+
+        watchComplicationDataAndColorChanges()
     }
 
     fun onDestroy() {
@@ -157,7 +160,7 @@ class ComplicationsSlots(
         val leftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = LEFT_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                getComplicationDrawable(ComplicationLocation.LEFT),
+                ComplicationLocation.LEFT.getComplicationDrawable(),
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.LEFT),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
@@ -167,7 +170,7 @@ class ComplicationsSlots(
         val middleComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = MIDDLE_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                getComplicationDrawable(ComplicationLocation.MIDDLE)
+                ComplicationLocation.MIDDLE.getComplicationDrawable()
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.MIDDLE),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
@@ -177,7 +180,7 @@ class ComplicationsSlots(
         val rightComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = RIGHT_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                getComplicationDrawable(ComplicationLocation.RIGHT)
+                ComplicationLocation.RIGHT.getComplicationDrawable()
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.RIGHT),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
@@ -187,7 +190,7 @@ class ComplicationsSlots(
         val bottomComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = BOTTOM_COMPLICATION_ID,
             canvasComplicationFactory = buildCanvasComplicationFactory(
-                getComplicationDrawable(ComplicationLocation.BOTTOM)
+                ComplicationLocation.BOTTOM.getComplicationDrawable()
             ),
             supportedTypes = getSupportedComplicationTypes(ComplicationLocation.BOTTOM),
             defaultDataSourcePolicy = DefaultComplicationDataSourcePolicy(),
@@ -214,40 +217,60 @@ class ComplicationsSlots(
         }
     }
 
-    fun updateComplicationDrawableStyles() {
-        for(complicationLocation in ComplicationLocation.values()) {
-            val drawable = getComplicationDrawable(complicationLocation)
+    @SuppressLint("RestrictedApi")
+    private fun watchComplicationDataAndColorChanges() {
+        scope.launch {
+            complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
+                val location = slot.id.toComplicationLocation() ?: return@forEach
+                val drawable = location.getComplicationDrawable()
 
-            val colors = storage.getComplicationColors()
-            val primaryComplicationColor = colors.getPrimaryColorForComplication(complicationLocation)
+                drawable.activeStyle.titleSize = titleSize
+                drawable.ambientStyle.titleSize = titleSize
+                drawable.activeStyle.titleColor = complicationTitleColor
+                drawable.ambientStyle.titleColor = complicationTitleColor
+                drawable.ambientStyle.iconColor = dateAndBatteryColorDimmed
+                drawable.activeStyle.setTextTypeface(productSansRegularFont)
+                drawable.ambientStyle.setTextTypeface(productSansRegularFont)
+                drawable.activeStyle.setTitleTypeface(productSansRegularFont)
+                drawable.ambientStyle.setTitleTypeface(productSansRegularFont)
+                drawable.activeStyle.borderColor = transparentColor
+                drawable.ambientStyle.borderColor = transparentColor
 
-            drawable.activeStyle.titleSize = titleSize
-            drawable.ambientStyle.titleSize = titleSize
-            drawable.activeStyle.titleColor = complicationTitleColor
-            drawable.ambientStyle.titleColor = complicationTitleColor
-            drawable.activeStyle.iconColor = primaryComplicationColor
-            drawable.ambientStyle.iconColor = dateAndBatteryColorDimmed
-            drawable.activeStyle.setTextTypeface(productSansRegularFont)
-            drawable.ambientStyle.setTextTypeface(productSansRegularFont)
-            drawable.activeStyle.setTitleTypeface(productSansRegularFont)
-            drawable.ambientStyle.setTitleTypeface(productSansRegularFont)
-            drawable.activeStyle.borderColor = transparentColor
-            drawable.ambientStyle.borderColor = transparentColor
+                slot.complicationData
+                    .combine(
+                        storage.watchComplicationColors()
+                    ) { data, colors ->
+                        Pair (data.asWireComplicationData(), colors)
+                    }
+                    .collect { (data, colors) ->
+                        val primaryComplicationColor = colors.getPrimaryColorForComplication(location)
+                        drawable.activeStyle.iconColor = primaryComplicationColor
+
+                        if( data.icon != null ) {
+                            if( location == ComplicationLocation.BOTTOM && ( data.longTitle != null ) ) {
+                                drawable.activeStyle.textColor = primaryComplicationColor
+                                drawable.ambientStyle.textColor = dateAndBatteryColorDimmed
+                            } else {
+                                drawable.activeStyle.textColor = complicationTitleColor
+                                drawable.ambientStyle.textColor = complicationTitleColor
+                            }
+
+                            if( location != ComplicationLocation.BOTTOM && data.shortTitle == null ) {
+                                drawable.activeStyle.textSize = titleSize
+                                drawable.ambientStyle.textSize = titleSize
+                            } else {
+                                drawable.activeStyle.textSize = textSize
+                                drawable.ambientStyle.textSize = textSize
+                            }
+                        } else {
+                            drawable.activeStyle.textColor = primaryComplicationColor
+                            drawable.ambientStyle.textColor = dateAndBatteryColorDimmed
+                            drawable.activeStyle.textSize = textSize
+                            drawable.ambientStyle.textSize = textSize
+                        }
+                    }
+            }
         }
-    }
-
-    fun watchComplicationData(complicationLocation: ComplicationLocation): Flow<ComplicationData>
-        = complicationSlotsManager[complicationLocation.getComplicationId()]?.complicationData ?: emptyFlow()
-
-    fun getComplicationDrawable(complicationLocation: ComplicationLocation): ComplicationDrawable = when(complicationLocation) {
-        ComplicationLocation.LEFT -> leftComplicationDrawable
-        ComplicationLocation.MIDDLE -> middleComplicationDrawable
-        ComplicationLocation.RIGHT -> rightComplicationDrawable
-        ComplicationLocation.BOTTOM -> bottomComplicationDrawable
-        ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
-        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
     }
 
     fun updateComplicationBounds(complicationLocation: ComplicationLocation, bounds: RectF) {
@@ -319,6 +342,10 @@ class ComplicationsSlots(
 
             if (slotLocation != null && slotLocation in activeSlots) {
                 if (slotLocation == ComplicationLocation.MIDDLE && storage.showWearOSLogo()) {
+                    continue
+                }
+
+                if (slotLocation == ComplicationLocation.BOTTOM && (storage.showWatchBattery() || storage.showPhoneBattery())) {
                     continue
                 }
 
@@ -507,6 +534,17 @@ class ComplicationsSlots(
                 }
             }
         }
+    }
+
+    private fun ComplicationLocation.getComplicationDrawable(): ComplicationDrawable = when(this) {
+        ComplicationLocation.LEFT -> leftComplicationDrawable
+        ComplicationLocation.MIDDLE -> middleComplicationDrawable
+        ComplicationLocation.RIGHT -> rightComplicationDrawable
+        ComplicationLocation.BOTTOM -> bottomComplicationDrawable
+        ComplicationLocation.ANDROID_12_TOP_LEFT -> TODO()
+        ComplicationLocation.ANDROID_12_TOP_RIGHT -> TODO()
+        ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> TODO()
+        ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> TODO()
     }
 
     companion object {

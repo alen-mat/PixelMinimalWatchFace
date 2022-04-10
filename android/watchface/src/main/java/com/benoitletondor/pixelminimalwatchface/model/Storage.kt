@@ -86,8 +86,10 @@ interface Storage {
     fun setUseThinTimeStyleInRegularMode(useThinTime: Boolean)
     fun getTimeSize(): Int
     fun setTimeSize(timeSize: Int)
+    fun watchTimeSize(): Flow<Int>
     fun getDateAndBatterySize(): Int
     fun setDateAndBatterySize(size: Int)
+    fun watchDateAndBatterySize(): Flow<Int>
     fun showSecondsRing(): Boolean
     fun setShowSecondsRing(showSecondsRing: Boolean)
     fun showWeather(): Boolean
@@ -118,6 +120,7 @@ interface Storage {
     fun setSecondRingColor(@ColorInt color: Int)
     fun getWidgetsSize(): Int
     fun setWidgetsSize(widgetsSize: Int)
+    fun watchWidgetsSize(): Flow<Int>
 }
 
 class StorageImpl(
@@ -321,9 +324,13 @@ class StorageImpl(
 
     override fun setTimeSize(timeSize: Int) = timeSizeCache.set(timeSize)
 
+    override fun watchTimeSize(): Flow<Int> = timeSizeCache.watchChanges()
+
     override fun getDateAndBatterySize(): Int = dateAndBatterySizeCache.get()
 
     override fun setDateAndBatterySize(size: Int) = dateAndBatterySizeCache.set(size)
+
+    override fun watchDateAndBatterySize(): Flow<Int> = dateAndBatterySizeCache.watchChanges()
 
     override fun showSecondsRing(): Boolean = showSecondsRingCache.get()
 
@@ -372,6 +379,8 @@ class StorageImpl(
     override fun getWidgetsSize(): Int = widgetsSizeCache.get()
 
     override fun setWidgetsSize(widgetsSize: Int) = widgetsSizeCache.set(widgetsSize)
+
+    override fun watchWidgetsSize(): Flow<Int> = widgetsSizeCache.watchChanges()
 
     override fun hasFeatureDropSummer2021NotificationBeenShown(): Boolean {
         return sharedPreferences.getBoolean(KEY_FEATURE_DROP_2021_NOTIFICATION, false)
