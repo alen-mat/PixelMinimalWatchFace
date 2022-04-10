@@ -37,6 +37,11 @@ import androidx.wear.watchface.complications.rendering.utils.SmallImageLayoutHel
 import java.time.Instant;
 import java.util.Objects;
 
+/*
+ * Copy/Paste of the "ComplicationRenderer" class with 1 main difference: it uses "CustomLayoutUtils.getInnerBounds"
+ * instead of "LayoutUtils.getInnerBounds"
+ */
+
 @SuppressLint({"RestrictedApi", "VisibleForTests"})
 public class CustomComplicationRenderer extends ComplicationRenderer {
     private static final float ICON_SIZE_FRACTION = 1.0f;

@@ -18,7 +18,8 @@ package com.benoitletondor.pixelminimalwatchface.helper
 import android.content.Context
 import android.util.Log
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
-import com.benoitletondor.pixelminimalwatchface.PhoneBatteryStatus
+import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace.Companion.HALF_HOUR_MS
+import com.benoitletondor.pixelminimalwatchface.model.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.findBestNode
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.startPhoneBatterySync
@@ -58,7 +59,7 @@ class BatteryPhoneSyncHelper(
                 val lastRequestTimestamp = lastPhoneSyncRequestTimestamp
                 if( storage.showPhoneBattery() &&
                     phoneBatteryStatus.isStale(System.currentTimeMillis()) &&
-                    (lastRequestTimestamp == null || System.currentTimeMillis() - lastRequestTimestamp > THIRTY_MINS_MS) ) {
+                    (lastRequestTimestamp == null || System.currentTimeMillis() - lastRequestTimestamp > HALF_HOUR_MS) ) {
                     lastPhoneSyncRequestTimestamp = System.currentTimeMillis()
 
                     context.syncPhoneBatteryStatus(storage)
@@ -105,6 +106,5 @@ class BatteryPhoneSyncHelper(
 
     companion object {
         private const val TAG = "BatteryPhoneSyncHelper"
-        private const val THIRTY_MINS_MS: Long = 1000 * 60 * 30L
     }
 }

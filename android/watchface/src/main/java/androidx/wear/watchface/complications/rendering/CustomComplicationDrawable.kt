@@ -49,6 +49,13 @@ import org.xmlpull.v1.XmlPullParserException
 import java.io.IOException
 import java.time.Instant
 
+/*
+ * It's a copy/paste of "ComplicationDrawable" with 3 differences:
+ * - Removed the constructor that takes a "ComplicationDrawable" as parameter as it uses private fields
+ * - The "complicationRenderer" field is of type "CustomComplicationRenderer" instead of "ComplicationRenderer"
+ * - Uses "CustomComplicationDrawableHelper" methods in "updateStyleIfRequired" as fields are internal
+ */
+
 /**
  * A styleable drawable object that draws complicationSlots. You can create a ComplicationDrawable from
  * XML inflation or by using one of the constructor methods.

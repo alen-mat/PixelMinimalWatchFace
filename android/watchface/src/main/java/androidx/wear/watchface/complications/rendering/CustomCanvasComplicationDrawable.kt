@@ -15,6 +15,11 @@ import androidx.wear.watchface.style.WatchFaceLayer
 import androidx.wear.watchface.utility.TraceEvent
 import java.time.ZonedDateTime
 
+/*
+ * It's just a copy paste of "CanvasComplicationDrawable" that implements the interface "CanvasComplication" rather
+ * than inheriting it.
+ * Only difference is that it takes a "CustomComplicationDrawable" as drawable instead of "ComplicationDrawable"
+ */
 class CustomCanvasComplicationDrawable(
     drawable: CustomComplicationDrawable,
     private val watchState: WatchState,

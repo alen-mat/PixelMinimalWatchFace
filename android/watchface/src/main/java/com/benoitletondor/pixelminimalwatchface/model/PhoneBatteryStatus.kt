@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-package com.benoitletondor.pixelminimalwatchface
+package com.benoitletondor.pixelminimalwatchface.model
 
 sealed class PhoneBatteryStatus {
     abstract fun isStale(currentTimestamp: Long): Boolean

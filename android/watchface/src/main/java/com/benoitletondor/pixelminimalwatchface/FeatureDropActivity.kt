@@ -15,19 +15,19 @@
  */
 package com.benoitletondor.pixelminimalwatchface
 
-import android.app.Activity
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.benoitletondor.pixelminimalwatchface.databinding.ActivityFeatureDropBinding
 import com.benoitletondor.pixelminimalwatchface.settings.SettingsActivity
 
-class FeatureDropActivity : Activity() {
+class FeatureDropActivity : AppCompatActivity() {
     private lateinit var binding: ActivityFeatureDropBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {

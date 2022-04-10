@@ -46,12 +46,6 @@ import kotlinx.coroutines.flow.callbackFlow
 import java.text.SimpleDateFormat
 import java.util.*
 
-private val galaxyWatch4AODBuggyWearOSVersions = setOf(
-    "EVA8",
-    "EVA9",
-)
-
-val isGalaxyWatch4AODBuggyWearOSVersion = Device.isSamsungGalaxyWatch && Build.VERSION.INCREMENTAL.takeLast(4) in galaxyWatch4AODBuggyWearOSVersions
 val isGalaxyWatch4CalendarBuggyWearOSVersion = Device.isSamsungGalaxyWatch && Build.VERSION.SECURITY_PATCH.startsWith("2022")
 
 fun Context.getTopAndBottomMargins(): Float {

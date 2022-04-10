@@ -21,6 +21,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
 import com.benoitletondor.pixelminimalwatchface.*
+import com.benoitletondor.pixelminimalwatchface.model.WatchBatteryStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow

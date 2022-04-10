@@ -22,7 +22,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Context.NOTIFICATION_SERVICE
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -61,20 +60,18 @@ class AppUpdateReceiver : BroadcastReceiver() {
         fun showFeatureDropNotification(context: Context) {
             try {
                 // Create notification channel if needed
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val importance = NotificationManager.IMPORTANCE_DEFAULT
-                    val mChannel = NotificationChannel(
-                        MISC_NOTIFICATION_CHANNEL_ID,
-                        context.getString(R.string.misc_notification_channel_name),
-                        importance
-                    )
-                    mChannel.description =
-                        context.getString(R.string.misc_notification_channel_description)
+                val importance = NotificationManager.IMPORTANCE_DEFAULT
+                val mChannel = NotificationChannel(
+                    MISC_NOTIFICATION_CHANNEL_ID,
+                    context.getString(R.string.misc_notification_channel_name),
+                    importance
+                )
+                mChannel.description =
+                    context.getString(R.string.misc_notification_channel_description)
 
-                    val notificationManager =
-                        context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                    notificationManager.createNotificationChannel(mChannel)
-                }
+                val notificationManager =
+                    context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.createNotificationChannel(mChannel)
 
                 val activityIntent = Intent(context, FeatureDropActivity::class.java)
                 val pendingIntent = PendingIntent.getActivity(
