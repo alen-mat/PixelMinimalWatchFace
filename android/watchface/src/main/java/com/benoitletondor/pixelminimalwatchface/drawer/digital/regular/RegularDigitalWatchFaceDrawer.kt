@@ -29,7 +29,6 @@ import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
-import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*

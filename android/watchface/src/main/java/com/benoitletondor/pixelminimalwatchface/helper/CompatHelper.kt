@@ -78,15 +78,15 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
 ): ComplicationData? {
     try {
         if (!Device.isSamsungGalaxyWatch) {
-            return this
+            return null
         }
 
         if (dataSource == null) {
-            return this
+            return null
         }
 
         if (type == ComplicationType.EMPTY) {
-            return this
+            return null
         }
 
         return when {
