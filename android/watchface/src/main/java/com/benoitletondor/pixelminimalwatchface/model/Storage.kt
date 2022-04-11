@@ -78,6 +78,7 @@ interface Storage {
     fun setAppVersion(version: Int)
     fun showWearOSLogo(): Boolean
     fun setShowWearOSLogo(shouldShowWearOSLogo: Boolean)
+    fun watchShowWearOSLogo(): Flow<Boolean>
     fun showComplicationsInAmbientMode(): Boolean
     fun setShowComplicationsInAmbientMode(show: Boolean)
     fun useNormalTimeStyleInAmbientMode(): Boolean
@@ -98,6 +99,7 @@ interface Storage {
     fun watchShowWeather(): Flow<Boolean>
     fun showWatchBattery(): Boolean
     fun setShowWatchBattery(show: Boolean)
+    fun watchShowWatchBattery(): Flow<Boolean>
     fun hasFeatureDropSummer2021NotificationBeenShown(): Boolean
     fun setFeatureDropSummer2021NotificationShown()
     fun getUseShortDateFormat(): Boolean
@@ -106,6 +108,7 @@ interface Storage {
     fun getShowDateInAmbient(): Boolean
     fun showPhoneBattery(): Boolean
     fun setShowPhoneBattery(show: Boolean)
+    fun watchShowPhoneBattery(): Flow<Boolean>
     @ColorInt fun getTimeAndDateColor(): Int
     fun getTimeAndDateColorFilter(): ColorFilter
     fun setTimeAndDateColor(@ColorInt color: Int)
@@ -307,6 +310,8 @@ class StorageImpl(
 
     override fun setShowWearOSLogo(shouldShowWearOSLogo: Boolean) = showWearOSLogoCache.set(shouldShowWearOSLogo)
 
+    override fun watchShowWearOSLogo(): Flow<Boolean> = showWearOSLogoCache.watchChanges()
+
     override fun showComplicationsInAmbientMode(): Boolean = showComplicationsInAmbientModeCache.get()
 
     override fun setShowComplicationsInAmbientMode(show: Boolean) = showComplicationsInAmbientModeCache.set(show)
@@ -347,9 +352,13 @@ class StorageImpl(
 
     override fun setShowWatchBattery(show: Boolean) = showWatchBattery.set(show)
 
+    override fun watchShowWatchBattery(): Flow<Boolean> = showWatchBattery.watchChanges()
+
     override fun showPhoneBattery(): Boolean = showPhoneBatteryCache.get()
 
     override fun setShowPhoneBattery(show: Boolean) = showPhoneBatteryCache.set(show)
+
+    override fun watchShowPhoneBattery(): Flow<Boolean> = showPhoneBatteryCache.watchChanges()
 
     override fun getTimeAndDateColor(): Int = timeAndDateColorCache.get().color
 

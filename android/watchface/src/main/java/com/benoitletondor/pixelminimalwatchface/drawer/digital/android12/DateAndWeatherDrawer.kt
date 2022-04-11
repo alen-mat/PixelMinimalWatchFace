@@ -15,7 +15,8 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital.android12
 
-/*
+
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -29,7 +30,7 @@ import com.benoitletondor.pixelminimalwatchface.helper.capitalize
 import com.benoitletondor.pixelminimalwatchface.helper.dpToPx
 import com.benoitletondor.pixelminimalwatchface.helper.sameAs
 import com.benoitletondor.pixelminimalwatchface.helper.toBitmap
-import java.util.*
+import java.time.ZonedDateTime
 
 interface DateAndWeatherDrawer {
     fun drawDateAndWeather(
@@ -37,7 +38,7 @@ interface DateAndWeatherDrawer {
         weatherComplicationData: ComplicationData?,
         useShortDateFormat: Boolean,
         isUserPremium: Boolean,
-        calendar: Calendar,
+        date: ZonedDateTime,
         datePaint: Paint,
         weatherIconPaint: Paint,
     )
@@ -70,12 +71,13 @@ class DateAndWeatherDrawerImpl(
         }
     }
 
+    @SuppressLint("RestrictedApi")
     override fun drawDateAndWeather(
         canvas: Canvas,
         weatherComplicationData: ComplicationData?,
         useShortDateFormat: Boolean,
         isUserPremium: Boolean,
-        calendar: Calendar,
+        date: ZonedDateTime,
         datePaint: Paint,
         weatherIconPaint: Paint,
     ) {
@@ -85,14 +87,14 @@ class DateAndWeatherDrawerImpl(
             DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_ABBREV_WEEKDAY
         }
 
-        val dateText = DateUtils.formatDateTime(context, calendar.timeInMillis, dateFormat).capitalize()
+        val dateText = DateUtils.formatDateTime(context, date.toInstant().toEpochMilli(), dateFormat).capitalize()
         val dateTextLength = datePaint.measureText(dateText)
         if( isUserPremium && weatherComplicationData != null ) {
             val weatherText = weatherComplicationData.shortText
             val weatherIcon = weatherComplicationData.icon
 
             if( weatherText != null && weatherIcon != null ) {
-                drawWeather(weatherText, weatherIcon, calendar, canvas, datePaint, weatherIconPaint)
+                drawWeather(weatherText, weatherIcon, date, canvas, datePaint, weatherIconPaint)
             } else {
                 currentWeatherBitmap = null
                 currentWeatherIcon = null
@@ -107,16 +109,17 @@ class DateAndWeatherDrawerImpl(
         canvas.drawText(dateText, centerX - (dateTextLength / 2f), dateYOffset, datePaint)
     }
 
+    @SuppressLint("RestrictedApi")
     private fun drawWeather(
         weatherText: ComplicationText,
         weatherIcon: Icon,
-        calendar: Calendar,
+        date: ZonedDateTime,
         canvas: Canvas,
         datePaint: Paint,
         weatherIconPaint: Paint,
     ) {
         val weatherIconSize = dateHeight
-        val weatherTextString = weatherText.getText(context, calendar.timeInMillis).toString()
+        val weatherTextString = weatherText.getTextAt(context.resources, date.toInstant().toEpochMilli()).toString()
         val weatherTextLength = datePaint.measureText(weatherTextString)
         val dateFontMetrics = datePaint.fontMetrics
 
@@ -167,5 +170,3 @@ class DateAndWeatherDrawerImpl(
         weatherTextEndX = weatherTextX + weatherTextLength
     }
 }
-
- */

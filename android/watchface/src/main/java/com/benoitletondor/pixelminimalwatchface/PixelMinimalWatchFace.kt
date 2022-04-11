@@ -27,6 +27,7 @@ import android.widget.Toast
 import androidx.wear.watchface.*
 import androidx.wear.watchface.style.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
+import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.*
@@ -117,7 +118,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
     }
 
-    @Suppress("OPT_IN_IS_NOT_ENABLED")
     @OptIn(ExperimentalCoroutinesApi::class)
     private class WatchFaceRenderer(
         private val context: Context,
@@ -262,8 +262,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
 
             val drawer = if (useAndroid12Style) {
-                // FIXME Android12DigitalWatchFaceDrawer(context, storage)
-                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
+                Android12DigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
             } else {
                 RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
             }

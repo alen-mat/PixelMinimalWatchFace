@@ -15,14 +15,13 @@
  */
 package com.benoitletondor.pixelminimalwatchface.drawer.digital.android12
 
-/*
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.*
 
 sealed class Android12DrawingState {
-    object NoScreenData : Android12DrawingState()
     data class NoCacheAvailable(
         val screenWidth: Int,
         val screenHeight: Int,
@@ -55,5 +54,3 @@ data class ComplicationsDrawingCache(
     val wearOSLogo: Bitmap,
     val wearOSLogoRect: Rect,
 )
-
- */
