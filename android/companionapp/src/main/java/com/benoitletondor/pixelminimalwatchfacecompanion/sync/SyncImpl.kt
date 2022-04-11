@@ -18,20 +18,19 @@ package com.benoitletondor.pixelminimalwatchfacecompanion.sync
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
-import android.os.Handler
-import android.os.ResultReceiver
 import android.util.Log
+import androidx.wear.remote.interactions.RemoteActivityHelper
 import com.benoitletondor.pixelminimalwatchfacecompanion.BuildConfig
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
-import com.google.android.wearable.intent.RemoteIntent
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.lang.RuntimeException
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -57,8 +56,9 @@ class SyncImpl @Inject constructor(@ApplicationContext private val context: Cont
         putDataRequest.setUrgent()
         dataClient.putDataItem(putDataRequest).await()
 
-        // Sending also as message
-        getConnectedWatchNode()?.let { watchNode ->
+        // Send also as message
+        val watchNodes = getConnectedWatchNodes()
+        for(watchNode in watchNodes) {
             messageClient.sendMessage(
                 watchNode.id,
                 KEY_PREMIUM,
@@ -86,31 +86,26 @@ class SyncImpl @Inject constructor(@ApplicationContext private val context: Cont
         }
     }
 
-    override suspend fun openPlayStoreOnWatch() = suspendCancellableCoroutine<Boolean> { continuation ->
-        try {
-            val intentAndroid = Intent(Intent.ACTION_VIEW)
-                .addCategory(Intent.CATEGORY_BROWSABLE)
-                .setData(Uri.parse(BuildConfig.WATCH_FACE_APP_PLAYSTORE_URL))
+    override suspend fun openPlayStoreOnWatchOrThrow() {
+        val intentAndroid = Intent(Intent.ACTION_VIEW)
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .setData(Uri.parse(BuildConfig.WATCH_FACE_APP_PLAYSTORE_URL))
 
-            RemoteIntent.startRemoteActivity(
-                context,
+        val nodes = Wearable.getNodeClient(context)
+            .connectedNodes
+            .await()
+            .filter { it.isNearby }
+
+        if (nodes.isEmpty()) {
+            throw NoSuchElementException("No watch found")
+        }
+
+        val activityHelper = RemoteActivityHelper(context, Dispatchers.IO.asExecutor())
+        for (node in nodes) {
+            activityHelper.startRemoteActivity(
                 intentAndroid,
-                object : ResultReceiver(Handler()) {
-                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                        if (resultCode == RemoteIntent.RESULT_OK) {
-                            if( continuation.isActive ) {
-                                continuation.resume(true)
-                            }
-                        } else {
-                            if( continuation.isActive ) {
-                                continuation.resumeWithException(RuntimeException("Error opening PlayStore on watch (result code: $resultCode)"))
-                            }
-                        }
-                    }
-                }
-            )
-        } catch (t: Throwable) {
-            continuation.resumeWithException(t)
+                node.id,
+            ).await()
         }
     }
 
@@ -123,37 +118,38 @@ class SyncImpl @Inject constructor(@ApplicationContext private val context: Cont
     }
 
     override suspend fun sendBatterySyncStatus(syncActivated: Boolean) {
-        val watchNode = getConnectedWatchNode() ?: throw IllegalStateException("Unable to reach watch")
+        val watchNodes = getConnectedWatchNodes()
 
-        messageClient.sendMessage(
-            watchNode.id,
-            KEY_SYNC_ACTIVATED,
-            byteArrayOf(if(syncActivated) { 1 } else { 0 }),
-        ).await()
+        for(watchNode in watchNodes) {
+            messageClient.sendMessage(
+                watchNode.id,
+                KEY_SYNC_ACTIVATED,
+                byteArrayOf(if(syncActivated) { 1 } else { 0 }),
+            ).await()
+        }
     }
 
     override suspend fun sendBatteryStatus(batteryPercentage: Int) {
-        val watchNode = getConnectedWatchNode() ?: throw IllegalStateException("Unable to reach watch")
+        val watchNodes = getConnectedWatchNodes()
 
-        messageClient.sendMessage(
-            watchNode.id,
-            KEY_BATTERY_STATUS_PERCENT,
-            byteArrayOf(batteryPercentage.toByte()),
-        ).await()
+        for(watchNode in watchNodes) {
+            messageClient.sendMessage(
+                watchNode.id,
+                KEY_BATTERY_STATUS_PERCENT,
+                byteArrayOf(batteryPercentage.toByte()),
+            ).await()
+        }
     }
 
-    private suspend fun getConnectedWatchNode(): Node? {
-        try {
-            val capabilityResult = capabilityClient.getCapability(BuildConfig.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await()
-
-            if (capabilityResult.name != BuildConfig.WATCH_CAPABILITY) {
-                return null
-            }
-
-            return capabilityResult.nodes.findBestNode()
+    private suspend fun getConnectedWatchNodes(): Set<Node> {
+        return try {
+            capabilityClient.getCapability(BuildConfig.WATCH_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+                .await()
+                .nodes
+                .filterNearby()
         } catch (t: Throwable) {
             Log.e("Sync", "Unable to find watch node", t)
-            return null
+            emptySet()
         }
     }
 
@@ -165,6 +161,6 @@ private suspend fun <T> Task<T>.await() = suspendCancellableCoroutine<T> { conti
     addOnCanceledListener { continuation.cancel() }
 }
 
-private fun Set<Node>.findBestNode(): Node? {
-    return firstOrNull { it.isNearby } ?: firstOrNull()
+private fun Set<Node>.filterNearby(): Set<Node> {
+    return filter { it.isNearby }.toSet()
 }

@@ -20,7 +20,7 @@ import com.google.android.gms.wearable.CapabilityClient
 interface Sync {
     suspend fun sendPremiumStatus(isUserPremium: Boolean)
     suspend fun getWearableStatus(): WearableStatus
-    suspend fun openPlayStoreOnWatch(): Boolean
+    suspend fun openPlayStoreOnWatchOrThrow()
     fun subscribeToCapabilityChanges(listener: CapabilityClient.OnCapabilityChangedListener)
     fun unsubscribeToCapabilityChanges(listener: CapabilityClient.OnCapabilityChangedListener)
 

@@ -207,15 +207,10 @@ class MainViewModel @Inject constructor(
     fun onInstallWatchFaceButtonPressed() {
         viewModelScope.launch {
             try {
-                if (withTimeoutOrNull(1000) { sync.openPlayStoreOnWatch() } == true) {
-                    eventMutableFlow.emit(EventType.PLAY_STORE_OPENED_ON_WATCH)
-                } else {
-                    errorEventMutableFlow.emit(ErrorType.UnableToOpenPlayStoreOnWatch)
-                }
+                withTimeout(2000) { sync.openPlayStoreOnWatchOrThrow() }
+                eventMutableFlow.emit(EventType.PLAY_STORE_OPENED_ON_WATCH)
             } catch (t: Throwable) {
-                if (t is CancellationException) {
-                    throw t
-                }
+                if (t is CancellationException) throw t
 
                 Log.e("MainViewModel", "Error opening PlayStore", t)
                 errorEventMutableFlow.emit(ErrorType.UnableToOpenPlayStoreOnWatch)
