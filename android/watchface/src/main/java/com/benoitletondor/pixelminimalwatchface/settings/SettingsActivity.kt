@@ -18,6 +18,7 @@ package com.benoitletondor.pixelminimalwatchface.settings
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -44,7 +45,7 @@ import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 
-class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChangedListener {
+class SettingsActivity : AppCompatActivity() {
     private lateinit var adapter: ComplicationConfigRecyclerViewAdapter
     private lateinit var storage: Storage
 
@@ -53,8 +54,6 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
     private lateinit var remoteActivityHelper: RemoteActivityHelper
     private lateinit var capabilityClient: CapabilityClient
     private lateinit var nodeClient: NodeClient
-
-    private var companionNode: Node? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -147,26 +146,10 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-
-        capabilityClient.addListener(this, BuildConfig.COMPANION_APP_CAPABILITY)
-    }
-
-    override fun onStop() {
-        capabilityClient.removeListener(this, BuildConfig.COMPANION_APP_CAPABILITY)
-
-        super.onStop()
-    }
-
     override fun onDestroy() {
         adapter.onDestroy()
 
         super.onDestroy()
-    }
-
-    override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
-        companionNode = capabilityInfo.nodes.firstOrNull { it.isNearby }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -214,13 +197,13 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
                 .setData(Uri.parse("pixelminimalwatchface://open"))
                 .setPackage(BuildConfig.APPLICATION_ID)
 
-            val companionNodeId = companionNode?.id
-            if (companionNodeId != null) {
-                lifecycleScope.launch {
+            lifecycleScope.launch {
+                val companionNode = capabilityClient.findCompanionNode()
+                if (companionNode != null) {
                     try {
                         remoteActivityHelper.startRemoteActivity(
                             intentAndroid,
-                            companionNodeId,
+                            companionNode.id,
                         ).await()
 
                         ConfirmationOverlay()
@@ -235,14 +218,14 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
                         if (e is CancellationException) throw e
                         openAppInStoreOnPhone()
                     }
+
+                } else {
+                    openAppInStoreOnPhone()
                 }
-
-            } else {
-                openAppInStoreOnPhone()
             }
+        } else {
+            openAppInStoreOnPhone()
         }
-
-        openAppInStoreOnPhone()
     }
 
     private fun openAppForDonationOnPhone() {
@@ -250,15 +233,14 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
             val intentAndroid = Intent(Intent.ACTION_VIEW)
                 .addCategory(Intent.CATEGORY_BROWSABLE)
                 .setData(Uri.parse("pixelminimalwatchface://donate"))
-                .setPackage(BuildConfig.APPLICATION_ID)
 
-            val companionNodeId = companionNode?.id
-            if (companionNodeId != null) {
-                lifecycleScope.launch {
+            lifecycleScope.launch {
+                val companionNode = capabilityClient.findCompanionNode()
+                if (companionNode != null) {
                     try {
                         remoteActivityHelper.startRemoteActivity(
                             intentAndroid,
-                            companionNodeId,
+                            companionNode.id,
                         ).await()
 
                         ConfirmationOverlay()
@@ -268,11 +250,13 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
                             .showOn(this@SettingsActivity)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
+
+                        Log.e("SettingsActivity", "Error opening app for donation on phone", e)
                         openAppInStoreOnPhone(finish = false)
                     }
+                } else {
+                    openAppInStoreOnPhone(finish = false)
                 }
-            } else {
-                openAppInStoreOnPhone(finish = false)
             }
         } else {
             openAppInStoreOnPhone(finish = false)
@@ -288,15 +272,12 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
                     .setData(Uri.parse(COMPANION_APP_PLAYSTORE_URL))
 
                 lifecycleScope.launch {
-                    val phoneNodes = nodeClient.connectedNodes.await()
-                    val phoneNode = phoneNodes.firstOrNull { it.isNearby }
-                    val phoneNodeId = phoneNode?.id
-
-                    if (phoneNodeId != null) {
+                    val phoneNode = nodeClient.findPhoneNode()
+                    if (phoneNode != null) {
                         try {
                             remoteActivityHelper.startRemoteActivity(
                                 intentAndroid,
-                                phoneNodeId,
+                                phoneNode.id,
                             ).await()
 
                             ConfirmationOverlay()
@@ -311,6 +292,8 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
                                 .showOn(this@SettingsActivity)
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
+
+                            Log.e("SettingsActivity", "Error opening app in PlayStore on phone", e)
                             Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
                         }
                     } else {
@@ -324,6 +307,33 @@ class SettingsActivity : AppCompatActivity(), CapabilityClient.OnCapabilityChang
             PhoneTypeHelper.DEVICE_TYPE_UNKNOWN, PhoneTypeHelper.DEVICE_TYPE_ERROR -> {
                 Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private suspend fun CapabilityClient.findCompanionNode(): Node? {
+        return try {
+            getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+                .await()
+                .nodes
+                .firstOrNull { it.isNearby }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+
+            Log.e("SettingsActivity", "Error finding companion node", e)
+            null
+        }
+    }
+
+    private suspend fun NodeClient.findPhoneNode(): Node? {
+        return try {
+            connectedNodes
+                .await()
+                .firstOrNull { it.isNearby }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+
+            Log.e("SettingsActivity", "Error finding phone node", e)
+            null
         }
     }
 

@@ -89,7 +89,7 @@ class SyncImpl @Inject constructor(@ApplicationContext private val context: Cont
     override suspend fun openPlayStoreOnWatchOrThrow() {
         val intentAndroid = Intent(Intent.ACTION_VIEW)
             .addCategory(Intent.CATEGORY_BROWSABLE)
-            .setData(Uri.parse(BuildConfig.WATCH_FACE_APP_PLAYSTORE_URL))
+            .setData(Uri.parse(BuildConfig.WATCH_FACE_APP_PLAYSTORE_DEEPLINK))
 
         val nodes = Wearable.getNodeClient(context)
             .connectedNodes
