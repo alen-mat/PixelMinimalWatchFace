@@ -79,3 +79,14 @@ fun Context.convertAbsoluteBoundsToScreenBounds(bounds: Rect): RectF {
         bounds.bottom / screenSize.height.toFloat(),
     )
 }
+
+fun Context.convertAbsoluteBoundsToScreenBounds(bounds: RectF): RectF {
+    val screenSize = getScreenSize()
+
+    return RectF(
+        bounds.left / screenSize.width.toFloat(),
+        bounds.top / screenSize.height.toFloat(),
+        bounds.right / screenSize.width.toFloat(),
+        bounds.bottom / screenSize.height.toFloat(),
+    )
+}

@@ -358,22 +358,22 @@ class Android12DigitalWatchFaceDrawer(
 
         complicationsSlots.updateComplicationBounds(
             ComplicationLocation.ANDROID_12_TOP_LEFT,
-            RectF(leftX, topY - complicationSize, leftX + complicationSize, topY),
+            context.convertAbsoluteBoundsToScreenBounds(RectF(leftX, topY - complicationSize, leftX + complicationSize, topY)),
         )
 
         complicationsSlots.updateComplicationBounds(
             ComplicationLocation.ANDROID_12_TOP_RIGHT,
-            RectF(rightX, topY - complicationSize, rightX + complicationSize, topY),
+            context.convertAbsoluteBoundsToScreenBounds(RectF(rightX, topY - complicationSize, rightX + complicationSize, topY)),
         )
 
         complicationsSlots.updateComplicationBounds(
             ComplicationLocation.ANDROID_12_BOTTOM_LEFT,
-            RectF(leftX, bottomY, leftX + complicationSize, bottomY + complicationSize),
+            context.convertAbsoluteBoundsToScreenBounds(RectF(leftX, bottomY, leftX + complicationSize, bottomY + complicationSize)),
         )
 
         complicationsSlots.updateComplicationBounds(
             ComplicationLocation.ANDROID_12_BOTTOM_RIGHT,
-            RectF(rightX, bottomY, rightX + complicationSize, bottomY + complicationSize),
+            context.convertAbsoluteBoundsToScreenBounds(RectF(rightX, bottomY, rightX + complicationSize, bottomY + complicationSize)),
         )
 
         val paddingBetweenBottomLogoAndBattery = if(storage.showWatchBattery() || storage.showPhoneBattery()) {
@@ -426,7 +426,7 @@ class Android12DigitalWatchFaceDrawer(
         watchBatteryValue: Int?,
         phoneBatteryValue: String?,
     ) {
-        val hourText = if( storage.getUse24hTimeFormat()) {
+        val hourText = if (storage.getUse24hTimeFormat()) {
             hourFormatter24H.format(date)
         } else {
             hourFormatter12H.format(date)
@@ -459,7 +459,7 @@ class Android12DigitalWatchFaceDrawer(
         canvas.drawText(minFirstChar, timeX + (timeCharWidth - minFirstCharWidth) / 2.5f, centerY + timeHeight + distanceBetweenHourAndMin + timePaddingY, timePaint)
         canvas.drawText(minSecondChar, timeX + timeCharWidth + (timeCharWidth - minSecondCharWidth) / 2.5f, centerY + timeHeight + distanceBetweenHourAndMin + timePaddingY, timePaint)
 
-        if( drawDate ) {
+        if (drawDate) {
             drawDateAndWeather(
                 canvas,
                 weatherComplicationData,
@@ -471,11 +471,11 @@ class Android12DigitalWatchFaceDrawer(
             )
         }
 
-        if( drawSecondsRing && !ambient ) {
+        if (drawSecondsRing && !ambient) {
             drawSecondRing(canvas, date, secondsRingPaint)
         }
 
-        if( isUserPremium && (watchBatteryValue != null || phoneBatteryValue != null) && (!ambient || !storage.hideBatteryInAmbient()) ) {
+        if (isUserPremium && (watchBatteryValue != null || phoneBatteryValue != null) && (!ambient || !storage.hideBatteryInAmbient())) {
             drawBattery(
                 canvas,
                 batteryLevelPaint,
@@ -485,6 +485,11 @@ class Android12DigitalWatchFaceDrawer(
                 watchBatteryValue,
                 phoneBatteryValue,
             )
+        }
+
+        if (storage.showWearOSLogo()) {
+            val wearOsImage = if( ambient ) { complicationsDrawingCache.wearOSLogoAmbient } else { complicationsDrawingCache.wearOSLogo }
+            canvas.drawBitmap(wearOsImage, null, complicationsDrawingCache.wearOSLogoRect, wearOSLogoPaint)
         }
     }
 }

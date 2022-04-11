@@ -536,6 +536,12 @@ class ComplicationConfigRecyclerViewAdapter(
                     providerInfo?.icon,
                     storage.getComplicationColors(),
                 )
+
+                android12ComplicationsViewHolder?.updateComplicationViews(
+                    complicationLocation,
+                    providerInfo?.icon,
+                    storage.getComplicationColors(),
+                )
             }
         }
     }
