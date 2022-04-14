@@ -24,6 +24,7 @@
 
     <!-- Required for complications to receive complication data and open the provider chooser. -->
     <uses-permission android:name="com.google.android.wearable.permission.RECEIVE_COMPLICATION_DATA" />
+    <uses-permission android:name="com.google.android.wearable.permission.RECEIVE_COMPLICATION_DATA_PRIVILEGED" />
 
     <!-- Read data from samsung health -->
     <uses-permission android:name="com.samsung.android.wear.shealth.healthdataprovider.permission.READ" />
@@ -58,7 +59,7 @@
             android:theme="@style/Theme.Default"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.benoitletondor.pixelminimalwatchface.CONFIG_COMPLICATION_SIMPLE"/>
+                <action android:name="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR" />
 
                 <category android:name="com.google.android.wearable.watchface.category.WEARABLE_CONFIGURATION"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -119,7 +120,7 @@
 
             <meta-data
                 android:name="com.google.android.wearable.watchface.wearableConfigurationAction"
-                android:value="com.benoitletondor.pixelminimalwatchface.CONFIG_COMPLICATION_SIMPLE"/>
+                android:value="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR"/>
 
             <intent-filter>
                 <action android:name="android.service.wallpaper.WallpaperService" />

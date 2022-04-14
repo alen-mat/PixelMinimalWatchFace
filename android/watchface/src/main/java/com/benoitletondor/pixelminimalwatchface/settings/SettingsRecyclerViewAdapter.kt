@@ -29,7 +29,8 @@ import com.benoitletondor.pixelminimalwatchface.helper.isPermissionGranted
 import com.benoitletondor.pixelminimalwatchface.helper.isScreenRound
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
-import com.benoitletondor.pixelminimalwatchface.settings.SettingsActivity.Companion.COMPLICATION_CONFIG_REQUEST_CODE
+import com.benoitletondor.pixelminimalwatchface.settings.SettingsActivity.Companion.WIDGET_ACTIVITY_REQUEST_CODE
+import com.benoitletondor.pixelminimalwatchface.settings.SettingsActivity.Companion.currentEditorSession
 import kotlinx.coroutines.*
 import kotlin.collections.ArrayList
 
@@ -123,7 +124,7 @@ class ComplicationConfigRecyclerViewAdapter(
 
                         (context as Activity).startActivityForResult(
                             WidgetConfigurationActivity.createIntent(context, location),
-                            COMPLICATION_CONFIG_REQUEST_CODE,
+                            WIDGET_ACTIVITY_REQUEST_CODE,
                         )
                     }
 
@@ -137,7 +138,7 @@ class ComplicationConfigRecyclerViewAdapter(
 
                         (context as Activity).startActivityForResult(
                             WidgetConfigurationActivity.createIntent(context, location),
-                            COMPLICATION_CONFIG_REQUEST_CODE,
+                            WIDGET_ACTIVITY_REQUEST_CODE,
                         )
                     }
 
@@ -523,26 +524,19 @@ class ComplicationConfigRecyclerViewAdapter(
     }
 
     private fun initializeColorsAndComplications(complicationLocations: List<ComplicationLocation>) {
+        val currentEditorSession = currentEditorSession ?: return
         for(complicationLocation in complicationLocations) {
-            scope.launch {
-                val providerInfo = ComplicationsSlots.retrieveProviderInfo(
-                    context,
-                    complicationLocation,
-                    complicationDataSourceInfoRetriever,
-                )
+            regularComplicationsViewHolder?.updateComplicationViews(
+                complicationLocation,
+                ComplicationsSlots.getComplicationDataSource(currentEditorSession, complicationLocation)?.icon,
+                storage.getComplicationColors(),
+            )
 
-                regularComplicationsViewHolder?.updateComplicationViews(
-                    complicationLocation,
-                    providerInfo?.icon,
-                    storage.getComplicationColors(),
-                )
-
-                android12ComplicationsViewHolder?.updateComplicationViews(
-                    complicationLocation,
-                    providerInfo?.icon,
-                    storage.getComplicationColors(),
-                )
-            }
+            android12ComplicationsViewHolder?.updateComplicationViews(
+                complicationLocation,
+                ComplicationsSlots.getComplicationDataSource(currentEditorSession, complicationLocation)?.icon,
+                storage.getComplicationColors(),
+            )
         }
     }
 

@@ -52,7 +52,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
     override fun onCreate() {
         super.onCreate()
 
-        if (DEBUG_LOGS) Log.d(TAG, "onCreate")
+        if (DEBUG_LOGS) Log.d(TAG, "onCreate, security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
 
         storage = Injection.storage(this)
 
@@ -78,6 +78,22 @@ class PixelMinimalWatchFace : WatchFaceService() {
     )
 
     override fun createComplicationSlotsManager(currentUserStyleRepository: CurrentUserStyleRepository): ComplicationSlotsManager {
+        if (DEBUG_LOGS) Log.d(TAG, "createComplicationSlotsManager")
+
+        // It will be called without calling onCreate before in headless mode (for settings)
+        if (!this::storage.isInitialized) {
+            if (DEBUG_LOGS) Log.d(TAG, "createComplicationSlotsManager, returning empty slots manager")
+
+            val complicationsSlots = ComplicationsSlots(this, Injection.storage(this), currentUserStyleRepository)
+            val slots = complicationsSlots.createComplicationsSlots()
+            complicationsSlots.onDestroy()
+
+            return ComplicationSlotsManager(
+                slots,
+                currentUserStyleRepository,
+            )
+        }
+
         if (this::complicationsSlots.isInitialized) {
             complicationsSlots.onDestroy()
         }
@@ -98,7 +114,19 @@ class PixelMinimalWatchFace : WatchFaceService() {
         complicationSlotsManager: ComplicationSlotsManager,
         currentUserStyleRepository: CurrentUserStyleRepository,
     ): WatchFace {
-        if (DEBUG_LOGS) Log.d(TAG, "createWatchFace. Security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
+        if (DEBUG_LOGS) Log.d(TAG, "createWatchFace. Headless? ${watchState.isHeadless}")
+
+        if (watchState.isHeadless) {
+            return WatchFace(
+                watchFaceType = WatchFaceType.DIGITAL,
+                renderer = NoOpEditorSessionWatchFaceRenderer(
+                    surfaceHolder = surfaceHolder,
+                    watchState = watchState,
+                    currentUserStyleRepository = currentUserStyleRepository,
+                    canvasType = CanvasType.SOFTWARE,
+                ),
+            )
+        }
 
         val renderer = WatchFaceRenderer(
             context = applicationContext,
@@ -123,7 +151,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private val context: Context,
         surfaceHolder: SurfaceHolder,
         private val watchState: WatchState,
-        currentUserStyleRepository: CurrentUserStyleRepository,
+        private val currentUserStyleRepository: CurrentUserStyleRepository,
         canvasType: Int,
         private val storage: Storage,
         private val complicationsSlots: ComplicationsSlots,
@@ -202,7 +230,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
-        override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {}
+        override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: SharedAssets) {
+            if (DEBUG_LOGS) Log.d(TAG, "renderHighlightLayer")
+        }
 
         override fun onTapEvent(
             tapType: Int,
@@ -262,9 +292,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
             if (DEBUG_LOGS) Log.d(TAG, "createWatchFaceDrawer, a12? $useAndroid12Style")
 
             val drawer = if (useAndroid12Style) {
-                Android12DigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
+                Android12DigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, currentUserStyleRepository, ::invalidate)
             } else {
-                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, ::invalidate)
+                RegularDigitalWatchFaceDrawer(context, storage, watchState, complicationsSlots, currentUserStyleRepository, ::invalidate)
             }
 
             complicationsSlots.setActiveComplicationLocations(drawer.getActiveComplicationLocations())
@@ -275,6 +305,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private fun watchWatchFaceDrawerChanges() {
             scope.launch {
                 storage.watchUseAndroid12Style()
+                    .drop(1)
                     .collect { useAndroid12Style ->
                         watchFaceDrawer.onDestroy()
                         watchFaceDrawer = createWatchFaceDrawer(useAndroid12Style)

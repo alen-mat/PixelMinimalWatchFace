@@ -16,13 +16,12 @@
 package com.benoitletondor.pixelminimalwatchface.settings
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
-import android.support.wearable.complications.ComplicationProviderInfo
-import androidx.wear.watchface.ComplicationDataSourceChooserIntent.EXTRA_PROVIDER_INFO
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.widget.WearableLinearLayoutManager
 import com.benoitletondor.pixelminimalwatchface.ComplicationsSlots
 import com.benoitletondor.pixelminimalwatchface.Injection
@@ -31,12 +30,15 @@ import com.benoitletondor.pixelminimalwatchface.databinding.ActivityWidgetConfig
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColorsProvider
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
+import kotlinx.coroutines.launch
 
-class WidgetConfigurationActivity : Activity() {
+class WidgetConfigurationActivity : ComponentActivity() {
     private lateinit var adapter: WidgetConfigRecyclerViewAdapter
     private lateinit var complicationLocation: ComplicationLocation
 
     private lateinit var binding: ActivityWidgetConfigBinding
+
+    private var finishWithComplicationChangesOnResume = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,10 +76,15 @@ class WidgetConfigurationActivity : Activity() {
                 startActivityForResult(ColorSelectionActivity.createIntent(this, defaultColor), UPDATE_COLORS_CONFIG_REQUEST_CODE)
             },
             onSelectComplicationClicked = {
-                startActivityForResult(
-                    ComplicationsSlots.createComplicationChooserIntent(this, complicationLocation),
-                    COMPLICATION_CONFIG_REQUEST_CODE
-                )
+                SettingsActivity.currentEditorSession?.let { editorSession ->
+                    lifecycleScope.launch {
+                        finishWithComplicationChangesOnResume = true
+                        ComplicationsSlots.startComplicationChooser(
+                            editorSession,
+                            complicationLocation,
+                        )
+                    }
+                }
             }
         )
 
@@ -87,17 +94,36 @@ class WidgetConfigurationActivity : Activity() {
             setHasFixedSize(true)
             adapter = this@WidgetConfigurationActivity.adapter
         }
+
+        lifecycleScope.launch {
+            val editorSession = SettingsActivity.currentEditorSession ?: return@launch
+
+            editorSession.complicationsDataSourceInfo
+                .collect {
+                    adapter.updateComplication(
+                        ComplicationsSlots.getComplicationDataSource(editorSession, complicationLocation)?.icon
+                    )
+                }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (finishWithComplicationChangesOnResume) {
+            finishWithComplicationChangesOnResume = false
+
+            setResult(RESULT_RELAUNCH, Intent().apply {
+                putExtra(EXTRA_COMPLICATION_LOCATION, complicationLocation as Parcelable)
+            })
+            finish()
+        }
     }
 
     @SuppressLint("RestrictedApi")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == COMPLICATION_CONFIG_REQUEST_CODE && resultCode == RESULT_OK) {
-            val complicationProviderInfo: ComplicationProviderInfo? = data?.getParcelableExtra(EXTRA_PROVIDER_INFO)
-
-            adapter.updateComplication(complicationProviderInfo?.providerIcon)
-
-            setResult(RESULT_OK)
-        } else if (requestCode == UPDATE_COLORS_CONFIG_REQUEST_CODE && resultCode == RESULT_OK) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == UPDATE_COLORS_CONFIG_REQUEST_CODE && resultCode == RESULT_OK) {
             val selectedColor = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
                 ?: return
 
@@ -125,9 +151,9 @@ class WidgetConfigurationActivity : Activity() {
     }
 
     companion object {
-        private const val COMPLICATION_CONFIG_REQUEST_CODE = 1001
         private const val UPDATE_COLORS_CONFIG_REQUEST_CODE = 1002
-        private const val EXTRA_COMPLICATION_LOCATION = "extra:complicationLocation"
+        const val EXTRA_COMPLICATION_LOCATION = "extra:complicationLocation"
+        const val RESULT_RELAUNCH = 589
 
         fun createIntent(
             context: Context,

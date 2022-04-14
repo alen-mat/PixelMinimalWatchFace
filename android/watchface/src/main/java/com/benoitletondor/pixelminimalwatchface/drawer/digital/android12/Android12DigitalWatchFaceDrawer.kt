@@ -18,14 +18,18 @@ package com.benoitletondor.pixelminimalwatchface.drawer.digital.android12
 import android.content.Context
 import android.graphics.*
 import android.support.wearable.complications.ComplicationData
+import android.util.Log
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.wear.watchface.TapEvent
 import androidx.wear.watchface.WatchState
+import androidx.wear.watchface.style.CurrentUserStyleRepository
 import com.benoitletondor.pixelminimalwatchface.ComplicationsSlots
+import com.benoitletondor.pixelminimalwatchface.DEBUG_LOGS
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
+import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
@@ -42,11 +46,12 @@ class Android12DigitalWatchFaceDrawer(
     private val storage: Storage,
     private val watchState: WatchState,
     private val complicationsSlots: ComplicationsSlots,
+    private val currentUserStyleRepository: CurrentUserStyleRepository,
     private val invalidateRenderer: () -> Unit,
 ) : WatchFaceDrawer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private var drawingState: Android12DrawingState =  kotlin.run {
+    private var drawingState: Android12DrawingState = kotlin.run {
         val screenSize = context.getScreenSize()
 
         Android12DrawingState.NoCacheAvailable(
@@ -100,12 +105,17 @@ class Android12DigitalWatchFaceDrawer(
     private val verticalPaddingBetweenElements = context.dpToPx(7)
 
     init {
+        if (DEBUG_LOGS) Log.d(TAG, "init")
+
         watchSizesChanges()
+        watchUserStyleChanges()
         watchShowBatteryIndicatorsChanges()
         watchShowWearOSLogoChanges()
     }
 
     override fun onDestroy() {
+        if (DEBUG_LOGS) Log.d(TAG, "onDestroy")
+
         scope.cancel()
     }
 
@@ -197,6 +207,19 @@ class Android12DigitalWatchFaceDrawer(
         }
     }
 
+    private fun watchUserStyleChanges() {
+        scope.launch {
+            currentUserStyleRepository.userStyle
+                .drop(1)
+                .collect {
+                    val bounds = complicationsSlots.getComplicationBounds(getActiveComplicationLocations().first())
+                    if (bounds == null || bounds.isEmpty) {
+                        recomputeDrawingStateAndReRender()
+                    }
+                }
+        }
+    }
+
     private fun watchShowBatteryIndicatorsChanges() {
         scope.launch {
             combine(
@@ -223,6 +246,8 @@ class Android12DigitalWatchFaceDrawer(
     }
 
     private fun recomputeDrawingStateAndReRender() {
+        if (DEBUG_LOGS) Log.d(TAG, "recomputeDrawingStateAndReRender")
+
         drawingState = when(val currentDrawingState = drawingState) {
             is Android12DrawingState.CacheAvailable -> currentDrawingState.buildCache()
             is Android12DrawingState.NoCacheAvailable -> currentDrawingState.buildCache()
@@ -491,6 +516,10 @@ class Android12DigitalWatchFaceDrawer(
             val wearOsImage = if( ambient ) { complicationsDrawingCache.wearOSLogoAmbient } else { complicationsDrawingCache.wearOSLogo }
             canvas.drawBitmap(wearOsImage, null, complicationsDrawingCache.wearOSLogoRect, wearOSLogoPaint)
         }
+    }
+
+    companion object {
+        private const val TAG = "Android12Renderer"
     }
 }
 

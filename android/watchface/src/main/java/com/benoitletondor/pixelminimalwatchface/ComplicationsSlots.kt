@@ -34,6 +34,7 @@ import androidx.wear.watchface.complications.rendering.CanvasComplicationDrawabl
 import androidx.wear.watchface.complications.rendering.ComplicationDrawable
 import androidx.wear.watchface.complications.rendering.CustomCanvasComplicationDrawable
 import androidx.wear.watchface.complications.rendering.CustomComplicationDrawable
+import androidx.wear.watchface.editor.EditorSession
 import androidx.wear.watchface.style.CurrentUserStyleRepository
 import androidx.wear.watchface.style.UserStyleSetting
 import androidx.wear.watchface.style.WatchFaceLayer
@@ -364,6 +365,7 @@ class ComplicationsSlots(
         }
 
         galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = emptySet()
+        calendarBuggyComplicationsLocationsMutableFlow.value = emptySet()
         rawComplicationDataSparseArray.clear()
         activeSlots.clear()
         activeSlots.addAll(activeLocations)
@@ -407,6 +409,18 @@ class ComplicationsSlots(
                 }
             }
         }
+    }
+
+    fun getComplicationBounds(complicationLocation: ComplicationLocation): RectF? {
+        val userStyle = currentUserStyleRepository.userStyle.value
+        val option = userStyle[UserStyleSetting.Id(COMPLICATIONS_SETTING_ID)] as? UserStyleSetting.ComplicationSlotsUserStyleSetting.ComplicationSlotsOption
+        val overlays = option?.complicationSlotOverlays
+
+        return overlays
+            ?.firstOrNull { it.complicationSlotId == complicationLocation.getComplicationId() }
+            ?.complicationSlotBounds
+            ?.perComplicationTypeBounds
+            ?.get(ComplicationType.SHORT_TEXT)
     }
 
     fun render(canvas: Canvas, zonedDateTime: ZonedDateTime, rendererParameters: RenderParameters) {
@@ -678,31 +692,17 @@ class ComplicationsSlots(
         )
 
         @SuppressLint("RestrictedApi")
-        fun createComplicationChooserIntent(
-            context: Context,
+        suspend fun startComplicationChooser(
+            editorSession: EditorSession,
             complicationLocation: ComplicationLocation,
-        ) = ComplicationHelperActivity.createComplicationDataSourceChooserHelperIntent(
-            context,
-            ComponentName(context, PixelMinimalWatchFace::class.java),
-            complicationLocation.getComplicationId(),
-            getSupportedComplicationTypes(complicationLocation),
-            null,
-            null,
-            null,
+        ) = editorSession.openComplicationDataSourceChooser(
+            complicationLocation.getComplicationId()
         )
 
-        suspend fun retrieveProviderInfo(
-            context: Context,
-            complicationLocation: ComplicationLocation,
-            retriever: ComplicationDataSourceInfoRetriever,
-        ): ComplicationDataSourceInfo? {
-            val results = retriever.retrieveComplicationDataSourceInfo(
-                ComponentName(context, PixelMinimalWatchFace::class.java),
-                intArrayOf(complicationLocation.getComplicationId()),
-            )
-
-            return results?.firstOrNull()?.info
-        }
+        fun getComplicationDataSource(
+            editorSession: EditorSession,
+            complicationLocation: ComplicationLocation
+        ): ComplicationDataSourceInfo? = editorSession.complicationsDataSourceInfo.value[complicationLocation.getComplicationId()]
 
         private fun ComplicationLocation.getComplicationId(): Int {
             return when (this) {

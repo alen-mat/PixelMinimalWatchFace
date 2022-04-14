@@ -20,11 +20,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.wear.phone.interactions.PhoneTypeHelper
 import androidx.wear.remote.interactions.RemoteActivityHelper
+import androidx.wear.watchface.editor.EditorSession
 import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
 import com.benoitletondor.pixelminimalwatchface.BuildConfig.COMPANION_APP_PLAYSTORE_URL
@@ -35,17 +36,21 @@ import com.benoitletondor.pixelminimalwatchface.getWeatherProviderInfo
 import com.benoitletondor.pixelminimalwatchface.helper.await
 import com.benoitletondor.pixelminimalwatchface.helper.openActivity
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
+import com.benoitletondor.pixelminimalwatchface.settings.WidgetConfigurationActivity.Companion.RESULT_RELAUNCH
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : ComponentActivity() {
     private lateinit var adapter: ComplicationConfigRecyclerViewAdapter
     private lateinit var storage: Storage
 
@@ -61,6 +66,32 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         storage = Injection.storage(this)
+
+        lifecycleScope.launch {
+            currentEditorSession = EditorSession.createOnWatchEditorSession(this@SettingsActivity)
+
+            currentEditorSession
+                ?.complicationsDataSourceInfo
+                ?.collect {
+                    if (storage.useAndroid12Style()) {
+                        adapter.updateAndroid12Complications()
+                    } else {
+                        adapter.updateRegularComplications()
+                    }
+                }
+        }
+
+        lifecycleScope.launch {
+            storage.watchComplicationColors()
+                .drop(1)
+                .collect {
+                    if (storage.useAndroid12Style()) {
+                        adapter.updateAndroid12Complications()
+                    } else {
+                        adapter.updateRegularComplications()
+                    }
+                }
+        }
 
         remoteActivityHelper = RemoteActivityHelper(this, Dispatchers.IO.asExecutor())
         capabilityClient = Wearable.getCapabilityClient(this)
@@ -148,6 +179,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         adapter.onDestroy()
+        currentEditorSession = null
 
         super.onDestroy()
     }
@@ -159,12 +191,6 @@ class SettingsActivity : AppCompatActivity() {
             adapter.weatherComplicationPermissionFinished()
         } else if( requestCode == COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE ) {
             adapter.batteryComplicationPermissionFinished()
-        } else if ( requestCode == COMPLICATION_CONFIG_REQUEST_CODE && resultCode == RESULT_OK ) {
-            if (storage.useAndroid12Style()) {
-                adapter.updateAndroid12Complications()
-            } else {
-                adapter.updateRegularComplications()
-            }
         } else if ( requestCode == COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE ) {
             if (storage.useAndroid12Style()) {
                 adapter.updateAndroid12Complications()
@@ -186,6 +212,14 @@ class SettingsActivity : AppCompatActivity() {
             val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
             if (color != null) {
                 storage.setSecondRingColor(color.color)
+            }
+        } else if (requestCode == WIDGET_ACTIVITY_REQUEST_CODE && resultCode == RESULT_RELAUNCH) {
+            data?.getParcelableExtra<ComplicationLocation>(WidgetConfigurationActivity.EXTRA_COMPLICATION_LOCATION)?.let { complicationLocation ->
+                startActivityForResult(
+                    WidgetConfigurationActivity.createIntent(this@SettingsActivity, complicationLocation),
+                    WIDGET_ACTIVITY_REQUEST_CODE,
+                )
+                overridePendingTransition(0, 0)
             }
         }
     }
@@ -340,10 +374,12 @@ class SettingsActivity : AppCompatActivity() {
     companion object {
         const val COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE = 1003
         const val COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE = 1004
-        const val COMPLICATION_CONFIG_REQUEST_CODE = 1005
         const val COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE = 1006
         const val TIME_AND_DATE_COLOR_REQUEST_CODE = 1007
         const val BATTERY_COLOR_REQUEST_CODE = 1008
         const val SECONDS_RING_COLOR_REQUEST_CODE = 1009
+        const val WIDGET_ACTIVITY_REQUEST_CODE = 1010
+
+        var currentEditorSession: EditorSession? = null
     }
 }

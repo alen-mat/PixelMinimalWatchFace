@@ -128,15 +128,9 @@ class WidgetConfigRecyclerViewAdapter(
     }
 
     private fun initializesColorsAndComplications() {
-        scope.launch {
-            val providerInfo = ComplicationsSlots.retrieveProviderInfo(
-                context,
-                complicationLocation,
-                complicationDataSourceInfoRetriever,
-            )
-
-            updateComplication(providerInfo?.icon)
-        }
+        val editorSession = SettingsActivity.currentEditorSession ?: return
+        val dataSource = ComplicationsSlots.getComplicationDataSource(editorSession, complicationLocation)
+        updateComplication(dataSource?.icon)
     }
 
     private class TitleViewHolder(view: View) : RecyclerView.ViewHolder(view) {

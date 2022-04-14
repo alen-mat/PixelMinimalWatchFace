@@ -19,13 +19,16 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.support.wearable.complications.ComplicationData
+import android.util.Log
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.wear.watchface.TapEvent
 import androidx.wear.watchface.WatchState
+import androidx.wear.watchface.style.CurrentUserStyleRepository
 import com.benoitletondor.pixelminimalwatchface.*
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
+import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.*
 import kotlinx.coroutines.*
@@ -42,6 +45,7 @@ class RegularDigitalWatchFaceDrawer(
     private val storage: Storage,
     private val watchState: WatchState,
     private val complicationsSlots: ComplicationsSlots,
+    private val currentUserStyleRepository: CurrentUserStyleRepository,
     private val invalidateRenderer: () -> Unit,
 ) : WatchFaceDrawer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -93,10 +97,15 @@ class RegularDigitalWatchFaceDrawer(
     private val weatherAndBatteryIconColorFilterDimmed: ColorFilter = PorterDuffColorFilter(dateAndBatteryColorDimmed, PorterDuff.Mode.SRC_IN)
 
     init {
+        if (DEBUG_LOGS) Log.d(TAG, "init")
+
         watchSizesChanges()
+        watchUserStyleChanges()
     }
 
     override fun onDestroy() {
+        if (DEBUG_LOGS) Log.d(TAG, "onDestroy")
+
         scope.cancel()
     }
 
@@ -111,14 +120,33 @@ class RegularDigitalWatchFaceDrawer(
             }
             .drop(1) // Ignore first value
             .collect {
-                drawingState = when(val currentDrawingState = drawingState) {
-                    is RegularDrawerDrawingState.CacheAvailable -> currentDrawingState.buildCache()
-                    is RegularDrawerDrawingState.NoCacheAvailable -> currentDrawingState.buildCache()
-                }
-
-                invalidateRenderer()
+                recomputeDrawingStateAndReRender()
             }
         }
+    }
+
+    private fun watchUserStyleChanges() {
+        scope.launch {
+            currentUserStyleRepository.userStyle
+                .drop(1)
+                .collect {
+                    val bounds = complicationsSlots.getComplicationBounds(getActiveComplicationLocations().first())
+                    if (bounds == null || bounds.isEmpty) {
+                        recomputeDrawingStateAndReRender()
+                    }
+                }
+        }
+    }
+
+    private fun recomputeDrawingStateAndReRender() {
+        if (DEBUG_LOGS) Log.d(TAG, "recomputeDrawingStateAndReRender")
+
+        drawingState = when(val currentDrawingState = drawingState) {
+            is RegularDrawerDrawingState.CacheAvailable -> currentDrawingState.buildCache()
+            is RegularDrawerDrawingState.NoCacheAvailable -> currentDrawingState.buildCache()
+        }
+
+        invalidateRenderer()
     }
 
     override fun getActiveComplicationLocations(): Set<ComplicationLocation> = setOf(
@@ -431,5 +459,9 @@ class RegularDigitalWatchFaceDrawer(
         datePaint.textSize = dateSize
         batteryLevelPaint.textSize = context.resources.getDimension(R.dimen.battery_level_size) * dateAndBatteryScaleFactor
         batteryIconSize = (context.resources.getDimension(R.dimen.battery_icon_size) * dateAndBatteryScaleFactor).toInt()
+    }
+
+    companion object {
+        private const val TAG = "RegularRenderer"
     }
 }
