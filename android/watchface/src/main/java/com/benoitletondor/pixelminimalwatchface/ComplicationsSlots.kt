@@ -163,7 +163,10 @@ class ComplicationsSlots(
                 ComplicationType.SHORT_TEXT,
             ),
             bounds = defaultComplicationSlotBounds,
-        ).build()
+        )
+            .setEnabled(true)
+            .setFixedComplicationDataSource(true)
+            .build()
 
         val weatherProviderInfo = context.getWeatherProviderInfo()
         val weatherComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
@@ -183,7 +186,10 @@ class ComplicationsSlots(
                 systemDataSourceFallbackDefaultType = ComplicationType.SHORT_TEXT,
             ),
             bounds = defaultComplicationSlotBounds,
-        ).setEnabled(false).build()
+        )
+            .setFixedComplicationDataSource(true)
+            .setEnabled(false)
+            .build()
 
         val leftComplication = ComplicationSlot.createRoundRectComplicationSlotBuilder(
             id = LEFT_COMPLICATION_ID,
