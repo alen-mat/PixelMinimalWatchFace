@@ -402,6 +402,8 @@ class ComplicationsSlots(
             if (newComplicationData != null) {
                 overrideComplicationData.put(slot.id, newComplicationData)
                 invalidateRendererMutableEventFlow.emit(Unit)
+            } else {
+                overrideComplicationData.remove(slot.id)
             }
         }
     }
@@ -520,6 +522,8 @@ class ComplicationsSlots(
                     if (newComplicationData != null) {
                         overrideComplicationData.put(slot.id, newComplicationData)
                         invalidateRendererMutableEventFlow.emit(Unit)
+                    } else {
+                        overrideComplicationData.remove(slot.id)
                     }
                 }
             }
