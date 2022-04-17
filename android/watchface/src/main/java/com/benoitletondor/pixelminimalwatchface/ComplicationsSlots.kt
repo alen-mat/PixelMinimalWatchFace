@@ -19,6 +19,7 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
 import android.util.SparseArray
@@ -29,7 +30,6 @@ import androidx.wear.watchface.complications.*
 import androidx.wear.watchface.complications.SystemDataSources.Companion.NO_DATA_SOURCE
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
-import androidx.wear.watchface.complications.data.EmptyComplicationData
 import androidx.wear.watchface.complications.rendering.CanvasComplicationDrawable
 import androidx.wear.watchface.complications.rendering.ComplicationDrawable
 import androidx.wear.watchface.complications.rendering.CustomCanvasComplicationDrawable
@@ -38,7 +38,6 @@ import androidx.wear.watchface.editor.EditorSession
 import androidx.wear.watchface.style.CurrentUserStyleRepository
 import androidx.wear.watchface.style.UserStyleSetting
 import androidx.wear.watchface.style.WatchFaceLayer
-import com.benoitletondor.pixelminimalwatchface.helper.ComplicationDataHelper.updateComplicationData
 import com.benoitletondor.pixelminimalwatchface.helper.isSamsungCalendarBuggyProvider
 import com.benoitletondor.pixelminimalwatchface.helper.isSamsungHeartRateProvider
 import com.benoitletondor.pixelminimalwatchface.helper.sanitizeForSamsungGalaxyWatchIfNeeded
@@ -63,7 +62,8 @@ class ComplicationsSlots(
 
     private val activeSlots: MutableSet<ComplicationLocation> = mutableSetOf()
     private val activeComplicationWatchingJobs: MutableList<Job> = mutableListOf()
-    private val rawComplicationDataSparseArray: SparseArray<ComplicationData> = SparseArray(COMPLICATION_IDS.size)
+    private val dirtyComplicationDataSlots: MutableSet<Int> = mutableSetOf()
+    private val overrideComplicationData: SparseArray<ComplicationData> = SparseArray()
 
     private lateinit var complicationSlotsManager: ComplicationSlotsManager
 
@@ -376,7 +376,8 @@ class ComplicationsSlots(
 
         galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = emptySet()
         calendarBuggyComplicationsLocationsMutableFlow.value = emptySet()
-        rawComplicationDataSparseArray.clear()
+        overrideComplicationData.clear()
+        dirtyComplicationDataSlots.clear()
         activeSlots.clear()
         activeSlots.addAll(activeLocations)
 
@@ -389,12 +390,13 @@ class ComplicationsSlots(
     fun refreshDataAtLocation(complicationLocation: ComplicationLocation) {
         if (DEBUG_LOGS) Log.d(TAG, "refreshDataAtLocation: $complicationLocation")
 
-        val complicationId = complicationLocation.getComplicationId()
-        updateComplicationData(
-            complicationSlotsManager,
-            complicationId,
-            rawComplicationDataSparseArray.get(complicationId, EmptyComplicationData()),
-        )
+        scope.launch {
+            synchronized(dirtyComplicationDataSlots) {
+                dirtyComplicationDataSlots.add(complicationLocation.getComplicationId())
+            }
+
+            invalidateRendererMutableEventFlow.emit(Unit)
+        }
     }
 
     fun setWeatherComplicationEnabled(enabled: Boolean) {
@@ -473,7 +475,31 @@ class ComplicationsSlots(
                     continue
                 }
 
-                slot.render(canvas, zonedDateTime, rendererParameters)
+                if (slot.id in dirtyComplicationDataSlots) {
+                    synchronized(dirtyComplicationDataSlots) {
+                        dirtyComplicationDataSlots.remove(slot.id)
+                    }
+
+                    overrideComplicationData.put(
+                        slot.id,
+                        slot.complicationData.value.sanitizeForSamsungGalaxyWatchIfNeeded(
+                            context,
+                            storage,
+                            slotLocation,
+                            complicationProviderSparseArray[slot.id],
+                        ),
+                    )
+                }
+
+                val bounds = slot.computeBounds(Rect(0, 0, canvas.width, canvas.height))
+                (slot.renderer as? CustomCanvasComplicationDrawable)?.render(
+                    canvas,
+                    bounds,
+                    zonedDateTime,
+                    rendererParameters,
+                    slot.id,
+                    overrideComplicationData[slot.id],
+                )
             }
         }
     }
@@ -490,31 +516,19 @@ class ComplicationsSlots(
             val location = slot.id.toComplicationLocation() ?: return@forEach
 
             val job = scope.launch {
-                var lastSanitizedData: ComplicationData? = null
                 slot.complicationData.collect { complicationData ->
-                    if (complicationData != lastSanitizedData) {
-                        if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData: $location, data: $complicationData")
+                    if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData: $location, data: $complicationData")
 
-                        rawComplicationDataSparseArray.put(slot.id, complicationData)
+                    val newComplicationData = complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
+                        context,
+                        storage,
+                        location,
+                        complicationProviderSparseArray[slot.id],
+                    )
 
-                        complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
-                            context,
-                            storage,
-                            location,
-                            complicationProviderSparseArray[slot.id],
-                        )?.let { sanitizedData ->
-                            if (DEBUG_LOGS) Log.d(TAG, "sanitizeForSamsungGalaxyWatch: $location")
-
-                            lastSanitizedData = sanitizedData
-
-                            updateComplicationData(
-                                complicationSlotsManager,
-                                slot.id,
-                                sanitizedData,
-                            )
-
-                            invalidateRendererMutableEventFlow.emit(Unit)
-                        }
+                    if (newComplicationData != null) {
+                        overrideComplicationData.put(slot.id, newComplicationData)
+                        invalidateRendererMutableEventFlow.emit(Unit)
                     }
                 }
             }
