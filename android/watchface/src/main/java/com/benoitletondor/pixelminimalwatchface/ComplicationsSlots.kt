@@ -62,7 +62,6 @@ class ComplicationsSlots(
 
     private val activeSlots: MutableSet<ComplicationLocation> = mutableSetOf()
     private val activeComplicationWatchingJobs: MutableList<Job> = mutableListOf()
-    private val dirtyComplicationDataSlots: MutableSet<Int> = mutableSetOf()
     private val overrideComplicationData: SparseArray<ComplicationData> = SparseArray()
 
     private lateinit var complicationSlotsManager: ComplicationSlotsManager
@@ -377,7 +376,6 @@ class ComplicationsSlots(
         galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value = emptySet()
         calendarBuggyComplicationsLocationsMutableFlow.value = emptySet()
         overrideComplicationData.clear()
-        dirtyComplicationDataSlots.clear()
         activeSlots.clear()
         activeSlots.addAll(activeLocations)
 
@@ -391,11 +389,20 @@ class ComplicationsSlots(
         if (DEBUG_LOGS) Log.d(TAG, "refreshDataAtLocation: $complicationLocation")
 
         scope.launch {
-            synchronized(dirtyComplicationDataSlots) {
-                dirtyComplicationDataSlots.add(complicationLocation.getComplicationId())
-            }
+            val slotId = complicationLocation.getComplicationId()
+            val slot = complicationSlotsManager.get(slotId) ?: return@launch
 
-            invalidateRendererMutableEventFlow.emit(Unit)
+            val newComplicationData = slot.complicationData.value.sanitizeForSamsungGalaxyWatchIfNeeded(
+                context,
+                storage,
+                complicationLocation,
+                complicationProviderSparseArray[slot.id],
+            )
+
+            if (newComplicationData != null) {
+                overrideComplicationData.put(slot.id, newComplicationData)
+                invalidateRendererMutableEventFlow.emit(Unit)
+            }
         }
     }
 
@@ -473,22 +480,6 @@ class ComplicationsSlots(
 
                 if (slotLocation == ComplicationLocation.BOTTOM && (storage.showWatchBattery() || storage.showPhoneBattery())) {
                     continue
-                }
-
-                if (slot.id in dirtyComplicationDataSlots) {
-                    synchronized(dirtyComplicationDataSlots) {
-                        dirtyComplicationDataSlots.remove(slot.id)
-                    }
-
-                    overrideComplicationData.put(
-                        slot.id,
-                        slot.complicationData.value.sanitizeForSamsungGalaxyWatchIfNeeded(
-                            context,
-                            storage,
-                            slotLocation,
-                            complicationProviderSparseArray[slot.id],
-                        ),
-                    )
                 }
 
                 val bounds = slot.computeBounds(Rect(0, 0, canvas.width, canvas.height))
