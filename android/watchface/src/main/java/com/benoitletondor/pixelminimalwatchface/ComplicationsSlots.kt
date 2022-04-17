@@ -56,7 +56,10 @@ class ComplicationsSlots(
     private val storage: Storage,
     private val currentUserStyleRepository: CurrentUserStyleRepository,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val complicationProviderSparseArray: SparseArray<ComplicationDataSourceInfo> = SparseArray(COMPLICATION_IDS.size)
+    private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
 
     private val activeSlots: MutableSet<ComplicationLocation> = mutableSetOf()
     private val activeComplicationWatchingJobs: MutableList<Job> = mutableListOf()
@@ -143,6 +146,7 @@ class ComplicationsSlots(
         if (DEBUG_LOGS) Log.d(TAG, "onDestroy")
 
         scope.cancel()
+        complicationDataSourceInfoRetriever.close()
     }
 
     fun createComplicationsSlots(): List<ComplicationSlot> {
@@ -377,6 +381,7 @@ class ComplicationsSlots(
         activeSlots.addAll(activeLocations)
 
         updateComplicationSetting()
+        updateComplicationProviders()
         watchComplicationSlotsData()
         watchWatchBatteryData()
     }
@@ -429,6 +434,32 @@ class ComplicationsSlots(
             ?.get(ComplicationType.SHORT_TEXT)
     }
 
+    fun updateComplicationProviders() {
+        if (DEBUG_LOGS) Log.d(TAG, "updateComplicationProviders")
+
+        scope.launch {
+            val results = complicationDataSourceInfoRetriever.retrieveComplicationDataSourceInfo(
+                ComponentName(context, PixelMinimalWatchFace::class.java),
+                COMPLICATION_IDS,
+            ) ?: return@launch
+
+            for(result in results) {
+                complicationProviderSparseArray.put(result.slotId, result.info)
+
+                val location = result.slotId.toComplicationLocation() ?: continue
+                if (location !in activeSlots) {
+                    continue
+                }
+
+                updateGalaxyWatch4ComplicationSlots(
+                    location,
+                    result.info,
+                    result.slotId,
+                )
+            }
+        }
+    }
+
     fun render(canvas: Canvas, zonedDateTime: ZonedDateTime, rendererParameters: RenderParameters) {
         for ((_, slot) in complicationSlotsManager.complicationSlots) {
             val slotLocation = slot.id.toComplicationLocation()
@@ -466,17 +497,11 @@ class ComplicationsSlots(
 
                         rawComplicationDataSparseArray.put(slot.id, complicationData)
 
-                        updateGalaxyWatch4ComplicationSlots(
-                            location,
-                            complicationData,
-                            slot.id,
-                        )
-
                         complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                             context,
                             storage,
                             location,
-                            complicationData.dataSource,
+                            complicationProviderSparseArray[slot.id],
                         )?.let { sanitizedData ->
                             if (DEBUG_LOGS) Log.d(TAG, "sanitizeForSamsungGalaxyWatch: $location")
 
@@ -581,28 +606,28 @@ class ComplicationsSlots(
 
     private fun updateGalaxyWatch4ComplicationSlots(
         location: ComplicationLocation,
-        complicationData: ComplicationData,
+        dataSourceInfo: ComplicationDataSourceInfo?,
         complicationId: Int
     ) {
         updateGalaxyWatch4HRComplicationSlots(
             location,
-            complicationData,
+            dataSourceInfo,
             complicationId,
         )
 
         updateGalaxyWatch4CalendarComplicationSlots(
             location,
-            complicationData,
+            dataSourceInfo,
             complicationId,
         )
     }
 
     private fun updateGalaxyWatch4HRComplicationSlots(
         location: ComplicationLocation,
-        complicationData: ComplicationData,
+        dataSourceInfo: ComplicationDataSourceInfo?,
         complicationSlotId: Int,
     ) {
-        val isGalaxyWatch4HeartRateComplication = complicationData.dataSource?.isSamsungHeartRateProvider() == true
+        val isGalaxyWatch4HeartRateComplication = dataSourceInfo?.componentName?.isSamsungHeartRateProvider() == true
         if (isGalaxyWatch4HeartRateComplication && location !in galaxyWatch4HeartRateComplicationsLocationsMutableFlow.value) {
             if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 HR complication detected, id: $complicationSlotId")
 
@@ -622,10 +647,10 @@ class ComplicationsSlots(
 
     private fun updateGalaxyWatch4CalendarComplicationSlots(
         location: ComplicationLocation,
-        complicationData: ComplicationData,
+        dataSourceInfo: ComplicationDataSourceInfo?,
         complicationSlotId: Int,
     ) {
-        val isGalaxyWatch4CalendarComplication = complicationData.dataSource?.isSamsungCalendarBuggyProvider() == true
+        val isGalaxyWatch4CalendarComplication = dataSourceInfo?.componentName?.isSamsungCalendarBuggyProvider() == true
         if (isGalaxyWatch4CalendarComplication && location !in calendarBuggyComplicationsLocationsMutableFlow.value) {
             if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 buggy calendar complication detected, id: $complicationSlotId")
 

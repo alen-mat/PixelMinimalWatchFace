@@ -186,6 +186,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchWatchBatteryHelperRendererInvalidate()
             watchWeatherDataUpdates()
             watchSecondsRingDisplayChanges()
+            watchVisibleStateForComplicationChanges()
 
             Wearable.getDataClient(context).addListener(this)
             Wearable.getMessageClient(context).addListener(this)
@@ -393,6 +394,18 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 storage.watchShowSecondsRing()
                     .collect { showSecondsRing ->
                         interactiveDrawModeUpdateDelayMillis = if (showSecondsRing) 1000 else 60000
+                    }
+            }
+        }
+
+        private fun watchVisibleStateForComplicationChanges() {
+            scope.launch {
+                watchState.isVisible
+                    .filterNotNull()
+                    .collect { isVisible ->
+                        if (isVisible) {
+                            complicationsSlots.updateComplicationProviders()
+                        }
                     }
             }
         }

@@ -34,6 +34,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import androidx.wear.watchface.complications.data.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
@@ -68,23 +69,21 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
     context: Context,
     storage: Storage,
     complicationLocation: ComplicationLocation,
-    dataSource: ComponentName?,
+    dataSourceInfo: ComplicationDataSourceInfo?,
 ): ComplicationData? {
     try {
         if (!Device.isSamsungGalaxyWatch) {
             return null
         }
 
-        if (dataSource == null) {
-            return null
-        }
+        val componentName = dataSourceInfo?.componentName ?: return null
 
         if (type == ComplicationType.EMPTY) {
             return null
         }
 
         return when {
-            dataSource.isSamsungHeartRateProvider() -> {
+            componentName.isSamsungHeartRateProvider() -> {
                 val shortText = context.getSamsungHeartRateData() ?: "?"
 
                 val icon = heartRateIcon ?: kotlin.run {
@@ -97,7 +96,7 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                     .setMonochromaticImage(MonochromaticImage.Builder(icon).setAmbientImage(icon).build())
                 builder.build()
             }
-            dataSource.isSamsungHealthBadComplicationData(context) -> {
+            componentName.isSamsungHealthBadComplicationData(context) -> {
                 android.support.wearable.complications.ComplicationData.Builder(this.asWireComplicationData())
                     .setTapAction(
                         PendingIntent.getActivity(
@@ -112,7 +111,7 @@ fun ComplicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                     .build()
                     .toApiComplicationData()
             }
-            dataSource.isSamsungCalendarBuggyProvider() -> {
+            componentName.isSamsungCalendarBuggyProvider() -> {
                 val nextEvent = context.getNextCalendarEvent() ?: return this
                 val isLargeWidget = complicationLocation == ComplicationLocation.BOTTOM
 
