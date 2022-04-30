@@ -446,13 +446,15 @@ class ComplicationsSlots(
     }
 
     fun updateComplicationProviders() {
-        if (DEBUG_LOGS) Log.d(TAG, "updateComplicationProviders")
+        if (DEBUG_LOGS) Log.d(TAG, "updateComplicationProviders: start")
 
         scope.launch {
             val results = complicationDataSourceInfoRetriever.retrieveComplicationDataSourceInfo(
                 ComponentName(context, PixelMinimalWatchFace::class.java),
                 COMPLICATION_IDS,
             ) ?: return@launch
+
+            if (DEBUG_LOGS) Log.d(TAG, "updateComplicationProviders: results: $results")
 
             for(result in results) {
                 complicationProviderSparseArray.put(result.slotId, result.info)
@@ -609,7 +611,7 @@ class ComplicationsSlots(
             ComplicationLocation.ANDROID_12_TOP_LEFT -> android12TopLeftComplicationOption = builder.build()
             ComplicationLocation.ANDROID_12_TOP_RIGHT -> android12TopRightComplicationOption = builder.build()
             ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> android12BottomLeftComplicationOption = builder.build()
-            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> android12TopRightComplicationOption = builder.build()
+            ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> android12BottomRightComplicationOption = builder.build()
         }
     }
 

@@ -31,7 +31,7 @@ import com.benoitletondor.pixelminimalwatchface.BuildConfig
 import com.benoitletondor.pixelminimalwatchface.BuildConfig.COMPANION_APP_PLAYSTORE_URL
 import com.benoitletondor.pixelminimalwatchface.Injection
 import com.benoitletondor.pixelminimalwatchface.R
-import com.benoitletondor.pixelminimalwatchface.databinding.ActivityComplicationConfigBinding
+import com.benoitletondor.pixelminimalwatchface.databinding.ActivitySettingsBinding
 import com.benoitletondor.pixelminimalwatchface.getWeatherProviderInfo
 import com.benoitletondor.pixelminimalwatchface.helper.await
 import com.benoitletondor.pixelminimalwatchface.helper.openActivity
@@ -54,7 +54,7 @@ class SettingsActivity : ComponentActivity() {
     private lateinit var adapter: ComplicationConfigRecyclerViewAdapter
     private lateinit var storage: Storage
 
-    private lateinit var binding: ActivityComplicationConfigBinding
+    private lateinit var binding: ActivitySettingsBinding
 
     private lateinit var remoteActivityHelper: RemoteActivityHelper
     private lateinit var capabilityClient: CapabilityClient
@@ -62,7 +62,7 @@ class SettingsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityComplicationConfigBinding.inflate(layoutInflater)
+        binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         storage = Injection.storage(this)
