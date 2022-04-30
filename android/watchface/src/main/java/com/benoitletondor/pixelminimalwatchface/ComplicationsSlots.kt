@@ -57,6 +57,7 @@ class ComplicationsSlots(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private var updateComplicationProvidersJob: Job? = null
     private val complicationProviderSparseArray: SparseArray<ComplicationDataSourceInfo> = SparseArray(COMPLICATION_IDS.size)
     private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
 
@@ -448,7 +449,8 @@ class ComplicationsSlots(
     fun updateComplicationProviders() {
         if (DEBUG_LOGS) Log.d(TAG, "updateComplicationProviders: start")
 
-        scope.launch {
+        updateComplicationProvidersJob?.cancel()
+        updateComplicationProvidersJob = scope.launch {
             val results = complicationDataSourceInfoRetriever.retrieveComplicationDataSourceInfo(
                 ComponentName(context, PixelMinimalWatchFace::class.java),
                 COMPLICATION_IDS,
