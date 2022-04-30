@@ -15,16 +15,19 @@
  */
 package com.benoitletondor.pixelminimalwatchface
 
-import android.graphics.Canvas
-import android.graphics.Rect
+import android.content.Context
+import android.graphics.*
 import android.util.Log
 import android.view.SurfaceHolder
+import androidx.core.content.ContextCompat
 import androidx.wear.watchface.Renderer
 import androidx.wear.watchface.WatchState
 import androidx.wear.watchface.style.CurrentUserStyleRepository
+import com.benoitletondor.pixelminimalwatchface.helper.toBitmap
 import java.time.ZonedDateTime
 
-class NoOpEditorSessionWatchFaceRenderer(
+class PreviewEditorSessionWatchFaceRenderer(
+    private val context: Context,
     surfaceHolder: SurfaceHolder,
     watchState: WatchState,
     currentUserStyleRepository: CurrentUserStyleRepository,
@@ -37,6 +40,11 @@ class NoOpEditorSessionWatchFaceRenderer(
     interactiveDrawModeUpdateDelayMillis = 60000L,
     clearWithBackgroundTintBeforeRenderingHighlightLayer = false,
 ) {
+    private val previewPaint = Paint().apply {
+        isAntiAlias = true
+    }
+    private var previewBitmap: Bitmap? = null
+    
     init {
         if (DEBUG_LOGS) Log.d(TAG, "init")
     }
@@ -57,7 +65,15 @@ class NoOpEditorSessionWatchFaceRenderer(
         sharedAssets: SharedAssets
     ) {
         if (DEBUG_LOGS) Log.d(TAG, "render")
-        // No-op
+
+        val previewBitmap = this.previewBitmap ?: kotlin.run {
+            if (DEBUG_LOGS) Log.d(TAG, "creating bitmap ${bounds.width()}x${bounds.height()}")
+            val bitmap = ContextCompat.getDrawable(context, R.drawable.preview)!!.toBitmap(bounds.width(), bounds.height())
+            this.previewBitmap = bitmap
+            bitmap
+        }
+
+        canvas.drawBitmap(previewBitmap, null, bounds, previewPaint)
     }
 
     override fun renderHighlightLayer(
@@ -71,6 +87,6 @@ class NoOpEditorSessionWatchFaceRenderer(
     }
 
     companion object {
-        private const val TAG = "NoOpWatchFaceRenderer"
+        private const val TAG = "PreviewWatchFaceRenderer"
     }
 }

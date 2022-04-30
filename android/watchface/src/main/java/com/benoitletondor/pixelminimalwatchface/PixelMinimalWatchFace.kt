@@ -119,7 +119,8 @@ class PixelMinimalWatchFace : WatchFaceService() {
         if (watchState.isHeadless) {
             return WatchFace(
                 watchFaceType = WatchFaceType.DIGITAL,
-                renderer = NoOpEditorSessionWatchFaceRenderer(
+                renderer = PreviewEditorSessionWatchFaceRenderer(
+                    context = this,
                     surfaceHolder = surfaceHolder,
                     watchState = watchState,
                     currentUserStyleRepository = currentUserStyleRepository,
