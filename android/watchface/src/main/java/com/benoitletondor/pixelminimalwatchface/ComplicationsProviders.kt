@@ -34,8 +34,6 @@ class ComplicationsProviders(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private var initialized = false
-
     private val complicationProviderSparseArray: SparseArray<ComplicationProvider> = SparseArray(complicationIds.size)
     private val complicationDataSourceInfoRetriever = ComplicationDataSourceInfoRetriever(context)
 
@@ -163,7 +161,7 @@ class ComplicationsProviders(
         private var instance: ComplicationsProviders? = null
 
         fun init(context: Context, complicationIds: IntArray) {
-            instance = ComplicationsProviders(context, complicationIds)
+            instance = ComplicationsProviders(context.applicationContext, complicationIds)
         }
 
         fun getInstance(): ComplicationsProviders {
