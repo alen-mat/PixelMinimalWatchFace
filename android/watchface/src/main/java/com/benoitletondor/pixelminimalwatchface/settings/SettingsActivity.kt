@@ -27,12 +27,10 @@ import androidx.wear.phone.interactions.PhoneTypeHelper
 import androidx.wear.remote.interactions.RemoteActivityHelper
 import androidx.wear.watchface.editor.EditorSession
 import androidx.wear.widget.ConfirmationOverlay
-import com.benoitletondor.pixelminimalwatchface.BuildConfig
+import com.benoitletondor.pixelminimalwatchface.*
 import com.benoitletondor.pixelminimalwatchface.BuildConfig.COMPANION_APP_PLAYSTORE_URL
-import com.benoitletondor.pixelminimalwatchface.Injection
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.databinding.ActivitySettingsBinding
-import com.benoitletondor.pixelminimalwatchface.getWeatherProviderInfo
 import com.benoitletondor.pixelminimalwatchface.helper.await
 import com.benoitletondor.pixelminimalwatchface.helper.openActivity
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
@@ -72,7 +70,16 @@ class SettingsActivity : ComponentActivity() {
 
             currentEditorSession
                 ?.complicationsDataSourceInfo
-                ?.collect {
+                ?.collect { infos ->
+                    try {
+                        infos.forEach { (slotId, complicationDataSourceInfo) ->
+                            ComplicationsProviders.getInstance().complicationDataSourceInfoUpdated(slotId, complicationDataSourceInfo)
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.e(TAG, "Error while updating data sources", e)
+                    }
+
                     if (storage.useAndroid12Style()) {
                         adapter.updateAndroid12Complications()
                     } else {
@@ -285,7 +292,7 @@ class SettingsActivity : ComponentActivity() {
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
 
-                        Log.e("SettingsActivity", "Error opening app for donation on phone", e)
+                        Log.e(TAG, "Error opening app for donation on phone", e)
                         openAppInStoreOnPhone(finish = false)
                     }
                 } else {
@@ -327,7 +334,7 @@ class SettingsActivity : ComponentActivity() {
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
 
-                            Log.e("SettingsActivity", "Error opening app in PlayStore on phone", e)
+                            Log.e(TAG, "Error opening app in PlayStore on phone", e)
                             Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
                         }
                     } else {
@@ -353,7 +360,7 @@ class SettingsActivity : ComponentActivity() {
         } catch (e: Exception) {
             if (e is CancellationException) throw e
 
-            Log.e("SettingsActivity", "Error finding companion node", e)
+            Log.e(TAG, "Error finding companion node", e)
             null
         }
     }
@@ -366,12 +373,14 @@ class SettingsActivity : ComponentActivity() {
         } catch (e: Exception) {
             if (e is CancellationException) throw e
 
-            Log.e("SettingsActivity", "Error finding phone node", e)
+            Log.e(TAG, "Error finding phone node", e)
             null
         }
     }
 
     companion object {
+        private const val TAG = "SettingsActivity"
+
         const val COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE = 1003
         const val COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE = 1004
         const val COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE = 1006

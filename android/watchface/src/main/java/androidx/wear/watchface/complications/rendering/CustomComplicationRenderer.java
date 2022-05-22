@@ -5,6 +5,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
@@ -44,6 +47,26 @@ import java.util.Objects;
 
 @SuppressLint({"RestrictedApi", "VisibleForTests"})
 public class CustomComplicationRenderer extends ComplicationRenderer {
+    /**
+     * When set to true, this class will draw rectangles around every component. It is to see
+     * padding and gravity. Testing this class with DEBUG_MODE set to true causes a test to fail so
+     * it's only meant to be true on local builds.
+     */
+    @VisibleForTesting
+    static final boolean DEBUG_MODE = false;
+
+    /** The gap between the in progress stroke and the remain stroke. */
+    @VisibleForTesting
+    static final int STROKE_GAP_IN_DEGREES = 4;
+
+    /**
+     * Starting angle for ranged value, i.e. in progress part will start from this angle. As it's
+     * drawn clockwise, -90 corresponds to 12 o'clock on a watch.
+     */
+    @VisibleForTesting
+    static final int RANGED_VALUE_START_ANGLE = -90;
+
+    /** Size fraction used for drawing icons. 1.0 here means no padding is applied. */
     private static final float ICON_SIZE_FRACTION = 1.0f;
 
     /**
@@ -122,6 +145,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
     boolean mIsPlaceholderTitle;
     @VisibleForTesting
     boolean mIsPlaceholderText;
+    boolean mIsPlaceholder;
 
     // Drawables for rendering rounded images
     private RoundedDrawable mRoundedBackgroundDrawable = null;
@@ -178,11 +202,17 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      * @param activeStyle  ComplicationSlot style to be used when in active mode.
      * @param ambientStyle ComplicationSlot style to be used when in ambient mode.
      */
-    public CustomComplicationRenderer(Context context, ComplicationStyle activeStyle, ComplicationStyle ambientStyle) {
+    CustomComplicationRenderer(
+            Context context, ComplicationStyle activeStyle, ComplicationStyle ambientStyle) {
         super(context, activeStyle, ambientStyle);
 
         mContext = context;
         updateStyle(activeStyle, ambientStyle);
+        if (DEBUG_MODE) {
+            mDebugPaint = new Paint();
+            mDebugPaint.setColor(Color.argb(128, 255, 255, 0));
+            mDebugPaint.setStyle(Paint.Style.STROKE);
+        }
     }
 
     /**
@@ -191,7 +221,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      * @param activeStyle  complication style in active mode
      * @param ambientStyle complication style in ambient mode
      */
-    @Override
     public void updateStyle(
             @NonNull ComplicationStyle activeStyle, @NonNull ComplicationStyle ambientStyle) {
         mActiveStyle = activeStyle;
@@ -214,7 +243,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      * @param loadDrawablesAsync If true any drawables will be loaded asynchronously, otherwise
      *                           they will be loaded synchronously.
      */
-    @Override
     public void setComplicationData(@Nullable ComplicationData data, boolean loadDrawablesAsync) {
         if (Objects.equals(mComplicationData, data)) {
             return;
@@ -234,9 +262,12 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         mIsPlaceholderRangedValue = false;
         mIsPlaceholderTitle = false;
         mIsPlaceholderText = false;
+        mIsPlaceholder = false;
 
         if (data.getType() == ComplicationData.TYPE_NO_DATA) {
-            if (data.hasPlaceholderType()) {
+            ComplicationData placeholder = data.getPlaceholder();
+            if (placeholder != null) {
+                data = placeholder;
                 mIsPlaceholderIcon = data.hasIcon() && ImageKt.isPlaceholder(data.getIcon());
                 mIsPlaceholderSmallImage =
                         data.hasSmallImage() && ImageKt.isPlaceholder(data.getSmallImage());
@@ -245,7 +276,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                 mIsPlaceholderRangedValue = data.hasRangedValue()
                         && data.getRangedValue()
                         == RangedValueComplicationData.PLACEHOLDER;
-                if (data.getPlaceholderType() == ComplicationData.TYPE_LONG_TEXT) {
+                if (data.getType() == ComplicationData.TYPE_LONG_TEXT) {
                     mIsPlaceholderTitle =
                             data.hasLongTitle() && data.getLongTitle().isPlaceholder();
                     mIsPlaceholderText =
@@ -258,6 +289,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                 }
                 mComplicationData = data;
                 mHasNoData = false;
+                mIsPlaceholder = true;
             } else {
                 if (!mHasNoData) {
                     // Render TYPE_NO_DATA as a short text complication with a predefined string
@@ -299,7 +331,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      *
      * @param bounds Bounds for the complication data to be drawn within.
      */
-    @Override
     public boolean setBounds(@NonNull Rect bounds) {
         // Calculations can be avoided if size didn't change
         boolean shouldCalculateBounds = true;
@@ -317,7 +348,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      * Sets the text to be rendered when {@link ComplicationData} is of type {@link
      * ComplicationData#TYPE_NO_DATA}. If no data text is null, an empty string will be rendered.
      */
-    @Override
     public void setNoDataText(@Nullable CharSequence noDataText) {
         if (noDataText == null) {
             noDataText = "";
@@ -334,7 +364,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
     }
 
     /** Sets if the ranged value progress should be hidden. */
-    @Override
     public void setRangedValueProgressHidden(boolean hidden) {
         if (mRangedValueProgressHidden != hidden) {
             mRangedValueProgressHidden = hidden;
@@ -344,7 +373,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
 
     /** Returns {@code true} if the ranged value progress should be hidden. */
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
-    @Override
     public boolean isRangedValueProgressHidden() {
         return mRangedValueProgressHidden;
     }
@@ -362,7 +390,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      * @param showTapHighlight true if the complication should be drawn with a highlighted effect,
      *                         to provide visual feedback after a tap.
      */
-    @Override
     public void draw(
             @NonNull Canvas canvas,
             Instant currentTime,
@@ -411,7 +438,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         canvas.restore();
     }
 
-    @Override
     public void setOnInvalidateListener(@Nullable OnInvalidateListener listener) {
         mInvalidateListener = listener;
     }
@@ -503,8 +529,8 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
             float height;
             // Avoid drawing two placeholder text fields of the same length.
             if (!mSubTextBounds.isEmpty()
-                    && (mComplicationData.getPlaceholderType() == ComplicationData.TYPE_SHORT_TEXT
-                    || mComplicationData.getPlaceholderType() == ComplicationData.TYPE_LONG_TEXT)) {
+                    && (mComplicationData.getType() == ComplicationData.TYPE_SHORT_TEXT
+                    || mComplicationData.getType() == ComplicationData.TYPE_LONG_TEXT)) {
                 width = mMainTextBounds.width() * 0.4f;
                 height = mMainTextBounds.height() * 0.9f;
             } else {
@@ -615,7 +641,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
             if (paintSet.isInBurnInProtectionMode() && mBurnInProtectionIcon != null) {
                 icon = mBurnInProtectionIcon;
             }
-            icon.setColorFilter(mComplicationData.hasPlaceholderType() ? PLACEHOLDER_COLOR_FILTER :
+            icon.setColorFilter(mIsPlaceholder ? PLACEHOLDER_COLOR_FILTER :
                     paintSet.mIconColorFilter);
             drawIconOnCanvas(canvas, mIconBounds, icon);
         } else if (isPlaceholder) {
@@ -724,9 +750,6 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         mBackgroundBoundsF.set(0, 0, mBounds.width(), mBounds.height());
         LayoutHelper currentLayoutHelper;
         int type = mComplicationData.getType();
-        if (type == ComplicationData.TYPE_NO_DATA && mComplicationData.hasPlaceholderType()) {
-            type = mComplicationData.getPlaceholderType();
-        }
         switch (type) {
             case ComplicationData.TYPE_ICON:
                 currentLayoutHelper = new IconLayoutHelper();
@@ -998,72 +1021,197 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
+    @VisibleForTesting
+    static class PaintSet {
+
+        private static final int SINGLE_COLOR_FILTER_ALPHA_CUTOFF = 127;
+
+        /** TextPaint for drawing primary text */
+        final TextPaint mPrimaryTextPaint;
+
+        /** TextPaint for drawing secondary text */
+        final TextPaint mSecondaryTextPaint;
+
+        /** Paint for drawing first part of ranged value. */
+        final Paint mInProgressPaint;
+
+        /** Paint for drawing second part of ranged value. */
+        final Paint mRemainingPaint;
+
+        /** Paint for drawing borders. */
+        final Paint mBorderPaint;
+
+        /** Paint for drawing background. */
+        final Paint mBackgroundPaint;
+
+        /** Paint for drawing highlight. */
+        final Paint mHighlightPaint;
+
+        /** Style used to construct this paint set. */
+        final ComplicationStyle mStyle;
+
+        /** True if this paint set is for an ambient style. */
+        final boolean mIsAmbientStyle;
+
+        /** True if this paint set is for low bit ambient mode. */
+        final boolean mLowBitAmbient;
+
+        /** True if this paint set is for burn in protection mode. */
+        final boolean mBurnInProtection;
+
+        /** Icon tint color filter */
+        final ColorFilter mIconColorFilter;
+
+        @SuppressLint("SyntheticAccessor")
+        PaintSet(
+                ComplicationStyle style,
+                boolean isAmbientStyle,
+                boolean lowBitAmbient,
+                boolean burnInProtection) {
+            this.mStyle = style;
+            this.mIsAmbientStyle = isAmbientStyle;
+            this.mLowBitAmbient = lowBitAmbient;
+            this.mBurnInProtection = burnInProtection;
+
+            boolean antiAlias = !(isAmbientStyle && lowBitAmbient);
+            if (lowBitAmbient) {
+                style = lowBitAmbientStyleFrom(style);
+            }
+
+            mPrimaryTextPaint = new TextPaint();
+            mPrimaryTextPaint.setColor(style.getTextColor());
+            mPrimaryTextPaint.setAntiAlias(antiAlias);
+            mPrimaryTextPaint.setTypeface(style.getTextTypeface());
+            mPrimaryTextPaint.setTextSize(style.getTextSize());
+            mPrimaryTextPaint.setAntiAlias(antiAlias);
+
+            mIconColorFilter =
+                    antiAlias
+                            ? new PorterDuffColorFilter(
+                            style.getIconColor(), PorterDuff.Mode.SRC_IN)
+                            : new ColorMatrixColorFilter(
+                            createSingleColorMatrix(style.getIconColor()));
+
+            mSecondaryTextPaint = new TextPaint();
+            mSecondaryTextPaint.setColor(style.getTitleColor());
+            mSecondaryTextPaint.setAntiAlias(antiAlias);
+            mSecondaryTextPaint.setTypeface(style.getTitleTypeface());
+            mSecondaryTextPaint.setTextSize(style.getTitleSize());
+            mSecondaryTextPaint.setAntiAlias(antiAlias);
+
+            mInProgressPaint = new Paint();
+            mInProgressPaint.setColor(style.getRangedValuePrimaryColor());
+            mInProgressPaint.setStyle(Paint.Style.STROKE);
+            mInProgressPaint.setAntiAlias(antiAlias);
+            mInProgressPaint.setStrokeWidth(style.getRangedValueRingWidth());
+
+            mRemainingPaint = new Paint();
+            mRemainingPaint.setColor(style.getRangedValueSecondaryColor());
+            mRemainingPaint.setStyle(Paint.Style.STROKE);
+            mRemainingPaint.setAntiAlias(antiAlias);
+            mRemainingPaint.setStrokeWidth(style.getRangedValueRingWidth());
+
+            mBorderPaint = new Paint();
+            mBorderPaint.setStyle(Paint.Style.STROKE);
+            mBorderPaint.setColor(style.getBorderColor());
+            if (style.getBorderStyle() == ComplicationStyle.BORDER_STYLE_DASHED) {
+                mBorderPaint.setPathEffect(
+                        new DashPathEffect(
+                                new float[]{style.getBorderDashWidth(), style.getBorderDashGap()},
+                                0));
+            }
+            if (style.getBorderStyle() == ComplicationStyle.BORDER_STYLE_NONE) {
+                mBorderPaint.setAlpha(0);
+            }
+            mBorderPaint.setStrokeWidth(style.getBorderWidth());
+            mBorderPaint.setAntiAlias(antiAlias);
+
+            mBackgroundPaint = new Paint();
+            mBackgroundPaint.setColor(style.getBackgroundColor());
+            mBackgroundPaint.setAntiAlias(antiAlias);
+
+            mHighlightPaint = new Paint();
+            mHighlightPaint.setColor(style.getHighlightColor());
+            mHighlightPaint.setAntiAlias(antiAlias);
+        }
+
+        boolean isInBurnInProtectionMode() {
+            return mIsAmbientStyle && mBurnInProtection;
+        }
+
+        /**
+         * Returns a color matrix that maps every color to the specified {@code color}, with an
+         * alpha value equal to zero if the input alpha is less than or equal to {@link
+         * #SINGLE_COLOR_FILTER_ALPHA_CUTOFF} or alpha of 1 otherwise.
+         */
+        @VisibleForTesting
+        static ColorMatrix createSingleColorMatrix(int color) {
+            return new ColorMatrix(
+                    new float[]{
+                            0, 0, 0, 0, Color.red(color),
+                            0, 0, 0, 0, Color.green(color),
+                            0, 0, 0, 0, Color.blue(color),
+                            0, 0, 0, 255, SINGLE_COLOR_FILTER_ALPHA_CUTOFF * -255
+                    });
+        }
+    }
+
     @NonNull
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Rect getBounds() {
         return mBounds;
     }
 
     @NonNull
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Rect getIconBounds() {
         return mIconBounds;
     }
 
     @Nullable
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Drawable getIcon() {
         return mIcon;
     }
 
     @Nullable
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Drawable getSmallImage() {
         return mSmallImage;
     }
 
     @Nullable
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Drawable getBurnInProtectionIcon() {
         return mBurnInProtectionIcon;
     }
 
     @Nullable
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Drawable getBurnInProtectionSmallImage() {
         return mBurnInProtectionSmallImage;
     }
 
     @Nullable
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public RoundedDrawable getRoundedSmallImage() {
         return mRoundedSmallImage;
     }
 
     @NonNull
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Rect getMainTextBounds() {
         return mMainTextBounds;
     }
 
     @NonNull
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public Rect getSubTextBounds() {
         return mSubTextBounds;
     }
 
     /** @param outRect Object that receives the computation of the complication's inner bounds */
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    @Override
     public void getComplicationInnerBounds(@NonNull Rect outRect) {
         LayoutUtils.getInnerBounds(
                 outRect,
@@ -1071,8 +1219,47 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                 Math.max(getBorderRadius(mActiveStyle), getBorderRadius(mAmbientStyle)));
     }
 
-    @Override
+    /**
+     * @param drawable The {@link ComplicationRenderer} to check against this one
+     * @return True if this {@link ComplicationRenderer} has the same layout as the provided one
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    public boolean hasSameLayout(@NonNull CustomComplicationRenderer drawable) {
+        return mBounds.equals(drawable.mBounds)
+                && mBackgroundBounds.equals(drawable.mBackgroundBounds)
+                && mIconBounds.equals(drawable.mIconBounds)
+                && mLargeImageBounds.equals(drawable.mLargeImageBounds)
+                && mSmallImageBounds.equals(drawable.mSmallImageBounds)
+                && mMainTextBounds.equals(drawable.mMainTextBounds)
+                && mSubTextBounds.equals(drawable.mSubTextBounds)
+                && mRangedValueBounds.equals(drawable.mRangedValueBounds);
+    }
+
     ComplicationData getComplicationData() {
         return mComplicationData;
+    }
+
+    /**
+     * Returns a {@link ComplicationStyle} based on the provided {@code style} but with colors
+     * restricted to black, white or transparent. All text and icon colors in the returned style
+     * will be set to white.
+     */
+    @NonNull
+    private static ComplicationStyle lowBitAmbientStyleFrom(@NonNull ComplicationStyle style) {
+        ComplicationStyle newStyle = new ComplicationStyle(style);
+        if (style.getBackgroundColor() != Color.BLACK) {
+            newStyle.setBackgroundColor(Color.TRANSPARENT);
+        }
+        newStyle.setTextColor(Color.WHITE);
+        newStyle.setTitleColor(Color.WHITE);
+        newStyle.setIconColor(Color.WHITE);
+        if (style.getBorderColor() != Color.BLACK && style.getBorderColor() != Color.TRANSPARENT) {
+            newStyle.setBorderColor(Color.WHITE);
+        }
+        newStyle.setRangedValuePrimaryColor(Color.WHITE);
+        if (style.getRangedValueSecondaryColor() != Color.BLACK) {
+            newStyle.setRangedValueSecondaryColor(Color.TRANSPARENT);
+        }
+        return newStyle;
     }
 }

@@ -55,6 +55,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         if (DEBUG_LOGS) Log.d(TAG, "onCreate, security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
 
         storage = Injection.storage(this)
+        ComplicationsProviders.init(this, ComplicationsSlots.COMPLICATION_IDS)
 
         // Set app version to the current one if not set yet (first launch)
         if (storage.getAppVersion() == DEFAULT_APP_VERSION) {
@@ -177,6 +178,11 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private var lastTapOnCenterOfScreenEventTimestamp: Long = 0
 
         init {
+            ComplicationsProviders.getInstance().initIfNeeded(
+                watchState.watchFaceInstanceId.value,
+                currentUserStyleRepository.userStyle.value.toUserStyleData()
+            )
+
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
 
             watchWatchFaceDrawerChanges()
@@ -187,7 +193,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchWatchBatteryHelperRendererInvalidate()
             watchWeatherDataUpdates()
             watchSecondsRingDisplayChanges()
-            watchVisibleStateForComplicationChanges()
 
             Wearable.getDataClient(context).addListener(this)
             Wearable.getMessageClient(context).addListener(this)
@@ -395,18 +400,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 storage.watchShowSecondsRing()
                     .collect { showSecondsRing ->
                         interactiveDrawModeUpdateDelayMillis = if (showSecondsRing) 1000 else 60000
-                    }
-            }
-        }
-
-        private fun watchVisibleStateForComplicationChanges() {
-            scope.launch {
-                watchState.isVisible
-                    .filterNotNull()
-                    .collect { isVisible ->
-                        if (isVisible) {
-                            complicationsSlots.updateComplicationProviders()
-                        }
                     }
             }
         }

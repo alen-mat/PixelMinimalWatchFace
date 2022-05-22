@@ -188,9 +188,6 @@ import java.time.Instant
  */
 @SuppressLint("RestrictedApi")
 class CustomComplicationDrawable : Drawable {
-    /**
-     * Returns the [Context] used to render the complication.
-     */
     public var context: Context? = null
         private set
 
