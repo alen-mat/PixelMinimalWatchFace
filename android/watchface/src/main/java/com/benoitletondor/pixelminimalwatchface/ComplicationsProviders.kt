@@ -22,7 +22,6 @@ import android.util.Log
 import android.util.SparseArray
 import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import androidx.wear.watchface.complications.ComplicationDataSourceInfoRetriever
-import androidx.wear.watchface.style.UserStyleData
 import com.benoitletondor.pixelminimalwatchface.helper.isSamsungCalendarBuggyProvider
 import com.benoitletondor.pixelminimalwatchface.helper.isSamsungHeartRateProvider
 import kotlinx.coroutines.*
@@ -46,13 +45,7 @@ class ComplicationsProviders(
     private val calendarBuggyComplicationsIdsMutableFlow = MutableStateFlow<Set<Int>>(emptySet())
     val calendarBuggyComplicationsIdsFlow: StateFlow<Set<Int>> = calendarBuggyComplicationsIdsMutableFlow
 
-    fun initIfNeeded(watchFaceId: String, userStyle: UserStyleData) {
-        if (initialized) {
-            return
-        }
-
-        initialized = true
-
+    init {
         scope.launch {
             fetchFromDataSourceInfoRetriever()
         }

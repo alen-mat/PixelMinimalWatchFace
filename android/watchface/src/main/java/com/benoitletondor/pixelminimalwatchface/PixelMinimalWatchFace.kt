@@ -178,11 +178,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
         private var lastTapOnCenterOfScreenEventTimestamp: Long = 0
 
         init {
-            ComplicationsProviders.getInstance().initIfNeeded(
-                watchState.watchFaceInstanceId.value,
-                currentUserStyleRepository.userStyle.value.toUserStyleData()
-            )
-
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
 
             watchWatchFaceDrawerChanges()
