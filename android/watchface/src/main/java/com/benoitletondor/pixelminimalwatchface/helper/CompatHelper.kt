@@ -27,8 +27,11 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 import android.content.ComponentName
 import android.content.ContentResolver
+import android.content.Context
 import android.content.Intent
 import android.database.ContentObserver
+import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -46,7 +49,12 @@ import kotlinx.coroutines.flow.callbackFlow
 import java.text.SimpleDateFormat
 import java.util.*
 
-val isGalaxyWatch4CalendarBuggyWearOSVersion = Device.isSamsungGalaxyWatch && Build.VERSION.SECURITY_PATCH.startsWith("2022")
+val isGalaxyWatch4CalendarBuggyWearOSVersion = Device.isSamsungGalaxyWatch && (
+    Build.VERSION.SECURITY_PATCH.startsWith("2022-01") ||
+    Build.VERSION.SECURITY_PATCH.startsWith("2022-02") ||
+    Build.VERSION.SECURITY_PATCH.startsWith("2022-03") ||
+    Build.VERSION.SECURITY_PATCH.startsWith("2022-04")
+)
 
 fun Context.getTopAndBottomMargins(): Float {
     return when {
@@ -305,9 +313,8 @@ fun Context.watchSamsungHeartRateUpdates(): Flow<Unit> = callbackFlow {
             super.onChange(selfChange)
 
             trySendBlocking(Unit)
-                .onFailure { error ->
+                .onFailure {
                     unregister(this)
-                    error?.let { throw it }
                 }
         }
     }
