@@ -653,10 +653,18 @@ class ComplicationsSlots(
             complicationLocation.getComplicationId()
         )
 
-        fun getComplicationDataSource(
-            editorSession: EditorSession,
-            complicationLocation: ComplicationLocation
-        ): ComplicationDataSourceInfo? = editorSession.complicationsDataSourceInfo.value[complicationLocation.getComplicationId()]
+        fun getComplicationsDataSources(
+            infos: Map<Int, ComplicationDataSourceInfo?>
+        ): Map<ComplicationLocation, ComplicationDataSourceInfo?> {
+            val results = mutableMapOf<ComplicationLocation, ComplicationDataSourceInfo?>()
+
+            infos.forEach { (slotId, info) ->
+                val location = slotId.toComplicationLocation() ?: return@forEach
+                results[location] = info
+            }
+
+            return results
+        }
 
         private fun ComplicationLocation.getComplicationId(): Int {
             return when (this) {

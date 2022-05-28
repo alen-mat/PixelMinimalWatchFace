@@ -15,11 +15,9 @@
  */
 package com.benoitletondor.pixelminimalwatchface.compose.component
 
-import android.support.wearable.complications.ComplicationProviderInfo
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -32,21 +30,22 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.core.graphics.drawable.toBitmap
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 
 @Composable
 fun SettingComplicationSlot(
     modifier: Modifier = Modifier,
-    providerInfo: ComplicationProviderInfo?,
+    providerInfo: ComplicationDataSourceInfo?,
     color: ComplicationColor?,
     onClick : (() -> Unit)?,
     iconWidth: Int = 40,
     iconHeight: Int = 40,
 ) {
     val context = LocalContext.current
-    val iconDrawable = remember(providerInfo?.providerIcon) {
-        providerInfo?.providerIcon?.loadDrawable(context)
+    val iconDrawable = remember(providerInfo?.icon) {
+        providerInfo?.icon?.loadDrawable(context)
     }
 
     Box(
@@ -78,7 +77,7 @@ fun SettingComplicationSlot(
                 if (iconDrawable != null) {
                     Image(
                         bitmap = iconDrawable.toBitmap(iconWidth, iconHeight).asImageBitmap(),
-                        contentDescription = providerInfo.providerName,
+                        contentDescription = providerInfo.name,
                         colorFilter = color?.let { ColorFilter.tint(Color(it.color)) },
                     )
                 }

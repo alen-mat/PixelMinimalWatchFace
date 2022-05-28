@@ -19,8 +19,6 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.ResultReceiver
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,17 +31,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.*
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
+import androidx.wear.remote.interactions.RemoteActivityHelper
 import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.compose.WearTheme
 import com.benoitletondor.pixelminimalwatchface.compose.component.ChipButton
 import com.benoitletondor.pixelminimalwatchface.compose.component.ExplanationText
 import com.benoitletondor.pixelminimalwatchface.compose.component.RotatoryAwareScalingLazyColumn
-import com.google.android.wearable.intent.RemoteIntent
+import com.benoitletondor.pixelminimalwatchface.helper.await
+import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.launch
 
 class FeedbackActivity : ComponentActivity() {
 
@@ -183,32 +189,51 @@ class FeedbackActivity : ComponentActivity() {
                             sendIntent.putExtra(Intent.EXTRA_TEXT, body)
                             sendIntent.putExtra(Intent.EXTRA_SUBJECT, subject)
 
-                            RemoteIntent.startRemoteActivity(
-                                this@FeedbackActivity,
-                                sendIntent,
-                                object : ResultReceiver(Handler()) {
-                                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                                        if (resultCode == RemoteIntent.RESULT_OK) {
-                                            ConfirmationOverlay()
-                                                .setOnAnimationFinishedListener {
-                                                    finish()
-                                                }
-                                                .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                                                .setDuration(3000)
-                                                .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
-                                                .showOn(this@FeedbackActivity)
-                                        } else if (resultCode == RemoteIntent.RESULT_FAILED) {
-                                            Toast.makeText(
-                                                this@FeedbackActivity,
-                                                getString(R.string.rating_feedback_send_error),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                            lifecycleScope.launch {
+                                val phoneNodes =
+                                    Wearable.getNodeClient(this@FeedbackActivity).connectedNodes.await()
+                                val phoneNode = phoneNodes.firstOrNull { it.isNearby }
+                                val phoneNodeId = phoneNode?.id
 
-                                            finish()
-                                        }
+                                if (phoneNodeId != null) {
+                                    try {
+                                        RemoteActivityHelper(
+                                            this@FeedbackActivity,
+                                            Dispatchers.IO.asExecutor()
+                                        ).startRemoteActivity(
+                                            sendIntent,
+                                            phoneNodeId,
+                                        ).await()
+
+                                        ConfirmationOverlay()
+                                            .setOnAnimationFinishedListener {
+                                                finish()
+                                            }
+                                            .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
+                                            .setDuration(3000)
+                                            .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
+                                            .showOn(this@FeedbackActivity)
+                                    } catch (e: Exception) {
+                                        if (e is CancellationException) throw e
+
+                                        Toast.makeText(
+                                            this@FeedbackActivity,
+                                            getString(R.string.rating_feedback_send_error),
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+
+                                        finish()
                                     }
+                                } else {
+                                    Toast.makeText(
+                                        this@FeedbackActivity,
+                                        getString(R.string.rating_feedback_send_error),
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+
+                                    finish()
                                 }
-                            )
+                            }
                         },
                         text = "Send feedback by email",
                         modifier = Modifier.padding(bottom = 8.dp),

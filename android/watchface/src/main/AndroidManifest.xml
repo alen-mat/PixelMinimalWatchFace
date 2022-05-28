@@ -56,7 +56,6 @@
         <activity
             android:name=".settings.SettingsActivity"
             android:label="@string/complication_config"
-            android:theme="@style/Theme.Default"
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR" />
@@ -68,25 +67,21 @@
 
         <activity
             android:name=".settings.WidgetConfigurationActivity"
-            android:theme="@style/Theme.Default"
             android:exported="false" />
 
         <activity
             android:name=".settings.phonebattery.PhoneBatteryConfigurationActivity"
             android:label="@string/phone_battery_configuration_title"
-            android:theme="@style/Theme.Default"
             android:exported="false"/>
 
         <activity
             android:name=".settings.phonebattery.troubleshoot.PhoneBatterySyncTroubleshootActivity"
             android:label="@string/phone_battery_configuration_troubleshoot_title"
-            android:theme="@style/Theme.Default"
             android:exported="false"/>
 
         <activity
             android:name=".FeatureDropActivity"
             android:label="@string/feature_drop_2021_notification_title"
-            android:theme="@style/Theme.Default"
             android:exported="false"/>
 
         <activity
@@ -96,7 +91,6 @@
 
         <activity
             android:name=".rating.FeedbackActivity"
-            android:theme="@style/Theme.Default"
             android:exported="false"/>
 
         <service

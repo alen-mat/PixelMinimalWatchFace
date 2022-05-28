@@ -15,17 +15,11 @@
  */
 package com.benoitletondor.pixelminimalwatchface.settings
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.ResultReceiver
-import android.support.wearable.complications.ComplicationHelperActivity
-import android.support.wearable.complications.ComplicationProviderInfo
-import android.support.wearable.complications.ProviderInfoRetriever
-import android.support.wearable.phone.PhoneDeviceType
-import android.support.wearable.view.ConfirmationOverlay
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -43,27 +37,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.*
+import androidx.wear.phone.interactions.PhoneTypeHelper
+import androidx.wear.remote.interactions.RemoteActivityHelper
+import androidx.wear.watchface.ComplicationHelperActivity
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
+import androidx.wear.watchface.editor.EditorSession
+import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.*
 import com.benoitletondor.pixelminimalwatchface.BuildConfig.COMPANION_APP_PLAYSTORE_URL
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.compose.*
 import com.benoitletondor.pixelminimalwatchface.compose.component.*
-import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
-import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
-import com.benoitletondor.pixelminimalwatchface.helper.fontDisplaySizeToHumanReadableString
-import com.benoitletondor.pixelminimalwatchface.helper.isPermissionGranted
-import com.benoitletondor.pixelminimalwatchface.helper.isScreenRound
-import com.benoitletondor.pixelminimalwatchface.helper.openActivity
+import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
 import com.benoitletondor.pixelminimalwatchface.settings.WidgetConfigurationActivity.Companion.RESULT_RELAUNCH
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
-import com.google.android.wearable.intent.RemoteIntent
+import com.google.android.gms.wearable.CapabilityClient
+import com.google.android.gms.wearable.Node
+import com.google.android.gms.wearable.NodeClient
+import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.guava.await
 
 class SettingsActivity : ComponentActivity() {
     private lateinit var storage: Storage
@@ -73,8 +71,7 @@ class SettingsActivity : ComponentActivity() {
     private lateinit var capabilityClient: CapabilityClient
     private lateinit var nodeClient: NodeClient
 
-    private val regularComplicationsMutableFlow = MutableStateFlow(emptyMap<ComplicationLocation, ComplicationProviderInfo?>())
-    private val android12ComplicationsMutableFlow = MutableStateFlow(emptyMap<ComplicationLocation, ComplicationProviderInfo?>())
+    private val complicationsMutableFlow = MutableStateFlow(emptyMap<ComplicationLocation, ComplicationDataSourceInfo?>())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,40 +94,7 @@ class SettingsActivity : ComponentActivity() {
                         Log.e(TAG, "Error while updating data sources", e)
                     }
 
-                    if (storage.useAndroid12Style()) {
-                        updateAndroid12Complications()
-                    } else {
-                        updateRegularComplications()
-                    }
-                }
-        }
-
-        lifecycleScope.launch {
-            storage.watchComplicationColors()
-                .drop(1)
-                .collect {
-                    if (storage.useAndroid12Style()) {
-                        updateAndroid12Complications()
-                    } else {
-                        updateRegularComplications()
-                    }
-                }
-        }
-
-        lifecycleScope.launch {
-            storage.watchUseAndroid12Style()
-                .mapLatest { useAndroid12 ->
-                    storage.watchIsUserPremium()
-                        .first { it }
-
-                    useAndroid12
-                }
-                .collect { useAndroid12 ->
-                    if (useAndroid12) {
-                        updateAndroid12Complications()
-                    } else {
-                        updateRegularComplications()
-                    }
+                    complicationsMutableFlow.value = ComplicationsSlots.getComplicationsDataSources(infos)
                 }
         }
 
@@ -149,6 +113,7 @@ class SettingsActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    @SuppressLint("RestrictedApi")
     @Composable
     private fun SettingsScreen() {
         val context = LocalContext.current
@@ -274,9 +239,11 @@ class SettingsActivity : ComponentActivity() {
                                     startActivityForResult(
                                         ComplicationHelperActivity.createPermissionRequestHelperIntent(
                                             context,
-                                            watchFaceComponentName
+                                            watchFaceComponentName,
+                                            null,
+                                            null,
                                         ),
-                                        COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE
+                                        COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE,
                                     )
                                 } else {
                                     storage.setShowWatchBattery(false)
@@ -350,7 +317,9 @@ class SettingsActivity : ComponentActivity() {
                                         startActivityForResult(
                                             ComplicationHelperActivity.createPermissionRequestHelperIntent(
                                                 context,
-                                                watchFaceComponentName
+                                                watchFaceComponentName,
+                                                null,
+                                                null,
                                             ),
                                             COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE
                                         )
@@ -596,7 +565,7 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     private fun Android12Complications() {
         val complicationColors by storage.watchComplicationColors().collectAsState(storage.getComplicationColors())
-        val complications by android12ComplicationsMutableFlow.collectAsState()
+        val complications by complicationsMutableFlow.collectAsState()
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -651,7 +620,7 @@ class SettingsActivity : ComponentActivity() {
         showBattery: Boolean,
     ) {
         val complicationColors by storage.watchComplicationColors().collectAsState(storage.getComplicationColors())
-        val complications by regularComplicationsMutableFlow.collectAsState()
+        val complications by complicationsMutableFlow.collectAsState()
         val showWearOSLogo by storage.watchShowWearOSLogo().collectAsState(storage.showWearOSLogo())
 
         Column(
@@ -718,71 +687,6 @@ class SettingsActivity : ComponentActivity() {
         )
     }
 
-    private suspend fun updateRegularComplications() {
-        try {
-            val complicationIds = RegularDigitalWatchFaceDrawer.ACTIVE_COMPLICATIONS
-            val complicationProviders = fetchComplicationProviders(complicationIds)
-            regularComplicationsMutableFlow.value = complicationProviders
-        } catch (e: Exception) {
-            if (e is CancellationException) { throw e }
-            Log.e(TAG, "Failed to retrieve regular complication provider info", e)
-        }
-    }
-
-    private suspend fun updateAndroid12Complications() {
-        try {
-            val complicationIds = Android12DigitalWatchFaceDrawer.ACTIVE_COMPLICATIONS
-            val complicationProviders = fetchComplicationProviders(complicationIds)
-            android12ComplicationsMutableFlow.value = complicationProviders
-        } catch (e: Exception) {
-            if (e is CancellationException) { throw e }
-            Log.e(TAG, "Failed to retrieve android 12 complication provider info", e)
-        }
-    }
-
-    private suspend fun fetchComplicationProviders(complicationIds: IntArray) =
-        suspendCancellableCoroutine<Map<ComplicationLocation, ComplicationProviderInfo?>> { continuation ->
-            val results = mutableMapOf<ComplicationLocation, ComplicationProviderInfo?>()
-            var count = 0
-            providerInfoRetriever.retrieveProviderInfo(
-                object : ProviderInfoRetriever.OnProviderInfoReceivedCallback() {
-                    override fun onProviderInfoReceived(watchFaceComplicationId: Int, complicationProviderInfo: ComplicationProviderInfo?) {
-                        count++
-
-                        val complicationLocation = when (watchFaceComplicationId) {
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.LEFT) -> { ComplicationLocation.LEFT }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.MIDDLE) -> { ComplicationLocation.MIDDLE }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.BOTTOM) -> { ComplicationLocation.BOTTOM }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.RIGHT) -> { ComplicationLocation.RIGHT  }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.ANDROID_12_TOP_LEFT) -> { ComplicationLocation.ANDROID_12_TOP_LEFT }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.ANDROID_12_TOP_RIGHT) -> { ComplicationLocation.ANDROID_12_TOP_RIGHT }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.ANDROID_12_BOTTOM_LEFT) -> { ComplicationLocation.ANDROID_12_BOTTOM_LEFT }
-                            PixelMinimalWatchFace.getComplicationId(ComplicationLocation.ANDROID_12_BOTTOM_RIGHT) -> { ComplicationLocation.ANDROID_12_BOTTOM_RIGHT }
-                            else -> null
-                        } ?: return
-
-                        results[complicationLocation] = complicationProviderInfo
-
-                        if (count == complicationIds.size) {
-                            if (continuation.isActive) {
-                                continuation.resume(results, onCancellation = null)
-                            }
-                        }
-                    }
-
-                    override fun onRetrievalFailed() {
-                        super.onRetrievalFailed()
-
-                        if (continuation.isActive) {
-                            continuation.resumeWithException(Exception("Failed to retrieve complication provider info"))
-                        }
-                    }
-                },
-                watchFaceComponentName,
-                *complicationIds
-            )
-        }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -792,12 +696,6 @@ class SettingsActivity : ComponentActivity() {
         } else if( requestCode == COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE ) {
             val granted = isPermissionGranted("com.google.android.wearable.permission.RECEIVE_COMPLICATION_DATA")
             storage.setShowWatchBattery(granted)
-        } else if ( requestCode == COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE ) {
-            if (storage.useAndroid12Style()) {
-                lifecycleScope.launch { updateAndroid12Complications() }
-            } else {
-                lifecycleScope.launch { updateRegularComplications() }
-            }
         } else if ( requestCode == TIME_AND_DATE_COLOR_REQUEST_CODE && resultCode == RESULT_OK ) {
             val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
             if (color != null) {
@@ -813,11 +711,11 @@ class SettingsActivity : ComponentActivity() {
             if (color != null) {
                 storage.setSecondRingColor(color.color)
             }
-        } else if (requestCode == WIDGET_ACTIVITY_REQUEST_CODE && resultCode == RESULT_RELAUNCH) {
+        } else if (requestCode == COMPLICATION_CONFIG_REQUEST_CODE && resultCode == RESULT_RELAUNCH) {
             data?.getParcelableExtra<ComplicationLocation>(WidgetConfigurationActivity.EXTRA_COMPLICATION_LOCATION)?.let { complicationLocation ->
                 startActivityForResult(
                     WidgetConfigurationActivity.createIntent(this@SettingsActivity, complicationLocation),
-                    WIDGET_ACTIVITY_REQUEST_CODE,
+                    COMPLICATION_CONFIG_REQUEST_CODE,
                 )
                 overridePendingTransition(0, 0)
             }

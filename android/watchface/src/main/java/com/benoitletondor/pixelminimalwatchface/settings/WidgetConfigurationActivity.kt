@@ -15,15 +15,12 @@
  */
 package com.benoitletondor.pixelminimalwatchface.settings
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
-import android.support.wearable.complications.ComplicationHelperActivity
-import android.support.wearable.complications.ComplicationProviderInfo
-import android.support.wearable.complications.ProviderChooserIntent
-import android.support.wearable.complications.ProviderInfoRetriever
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -36,7 +33,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.*
+import androidx.wear.watchface.complications.ComplicationDataSourceInfo
+import com.benoitletondor.pixelminimalwatchface.ComplicationsSlots
 import com.benoitletondor.pixelminimalwatchface.Injection
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.compose.WearTheme
@@ -46,15 +46,14 @@ import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColorsProvider
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class WidgetConfigurationActivity : ComponentActivity() {
     private lateinit var complicationLocation: ComplicationLocation
     private lateinit var storage: Storage
 
-    private val complicationProviderMutableFlow = MutableStateFlow<ComplicationProviderInfo?>(null)
+    private val complicationProviderMutableFlow = MutableStateFlow<ComplicationDataSourceInfo?>(null)
     private lateinit var complicationColorMutableFlow: MutableStateFlow<ComplicationColor>
 
     private var finishWithComplicationChangesOnResume = false
@@ -84,9 +83,15 @@ class WidgetConfigurationActivity : ComponentActivity() {
             ComplicationLocation.ANDROID_12_BOTTOM_LEFT -> storage.getComplicationColors().android12BottomLeftColor
             ComplicationLocation.ANDROID_12_BOTTOM_RIGHT -> storage.getComplicationColors().android12BottomRightColor
         })
-        providerInfoRetriever = ProviderInfoRetriever(this, Dispatchers.IO.asExecutor())
-        providerInfoRetriever.init()
-        initializesColorsAndComplications()
+
+        lifecycleScope.launch {
+            SettingsActivity.currentEditorSession
+                ?.complicationsDataSourceInfo
+                ?.collect { infos ->
+                    val infosPerLocation = ComplicationsSlots.getComplicationsDataSources(infos)
+                    complicationProviderMutableFlow.value = infosPerLocation[complicationLocation]
+                }
+        }
 
         setContent {
             val complicationProvider by complicationProviderMutableFlow.collectAsState()
@@ -135,15 +140,15 @@ class WidgetConfigurationActivity : ComponentActivity() {
                                 )
                             },
                             onClick = {
-                                startActivityForResult(
-                                    ComplicationHelperActivity.createProviderChooserHelperIntent(
-                                        this@WidgetConfigurationActivity,
-                                        ComponentName(this@WidgetConfigurationActivity, PixelMinimalWatchFace::class.java),
-                                        getComplicationId(complicationLocation),
-                                        *getSupportedComplicationTypes(complicationLocation)
-                                    ),
-                                    COMPLICATION_CONFIG_REQUEST_CODE
-                                )
+                                SettingsActivity.currentEditorSession?.let { editorSession ->
+                                    lifecycleScope.launch {
+                                        finishWithComplicationChangesOnResume = true
+                                        ComplicationsSlots.startComplicationChooser(
+                                            editorSession,
+                                            complicationLocation,
+                                        )
+                                    }
+                                }
                             },
                             colors = ChipDefaults.primaryChipColors(
                                 backgroundColor = MaterialTheme.colors.surface,
@@ -200,15 +205,6 @@ class WidgetConfigurationActivity : ComponentActivity() {
                 }
             }
         }
-
-        lifecycleScope.launch {
-            val editorSession = SettingsActivity.currentEditorSession ?: return@launch
-
-            editorSession.complicationsDataSourceInfo
-                .collect {
-                    complicationProviderMutableFlow.value = complicationProviderMutableFlow.valueComplicationsSlots.getComplicationDataSource(editorSession, complicationLocation)
-                }
-        }
     }
 
     override fun onResume() {
@@ -224,7 +220,6 @@ class WidgetConfigurationActivity : ComponentActivity() {
         }
     }
 
-    @SuppressLint("RestrictedApi")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -248,18 +243,6 @@ class WidgetConfigurationActivity : ComponentActivity() {
             complicationColorMutableFlow.value = selectedColor
             setResult(RESULT_OK)
         }
-    }
-
-    private fun initializesColorsAndComplications() {
-        providerInfoRetriever.retrieveProviderInfo(
-            object : ProviderInfoRetriever.OnProviderInfoReceivedCallback() {
-                override fun onProviderInfoReceived(watchFaceComplicationId: Int, complicationProviderInfo: ComplicationProviderInfo?) {
-                    complicationProviderMutableFlow.value = complicationProviderInfo
-                }
-            },
-            ComponentName(this, PixelMinimalWatchFace::class.java),
-            getComplicationId(complicationLocation)
-        )
     }
 
     companion object {

@@ -20,10 +20,10 @@ import android.graphics.*
 import android.util.Log
 import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.wear.watchface.Renderer
 import androidx.wear.watchface.WatchState
 import androidx.wear.watchface.style.CurrentUserStyleRepository
-import com.benoitletondor.pixelminimalwatchface.helper.toBitmap
 import java.time.ZonedDateTime
 
 class PreviewEditorSessionWatchFaceRenderer(
