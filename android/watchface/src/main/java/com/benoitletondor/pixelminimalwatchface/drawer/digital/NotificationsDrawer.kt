@@ -49,7 +49,7 @@ class NotificationsDrawerImpl(
     }
     private val notificationTopPx = notificationsRect.top + (notificationsRect.bottom - notificationsRect.top - notificationSizePx) / 2f
     private val moreIconBitmap = ContextCompat
-        .getDrawable(context, R.drawable.ic_more_horiz_24dp_wht)!!
+        .getDrawable(context, R.drawable.ic_baseline_more_horiz_24)!!
         .toBitmap(notificationSizePx.toInt(), notificationSizePx.toInt())
     private val stateIconBitmap = ContextCompat
         .getDrawable(context, R.drawable.ic_baseline_question_mark_24)!!

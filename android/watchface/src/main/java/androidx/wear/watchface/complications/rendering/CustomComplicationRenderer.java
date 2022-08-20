@@ -9,12 +9,14 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
+import android.graphics.Paint.Style;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.Icon.OnDrawableLoadedListener;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.wearable.complications.ComplicationData;
@@ -24,6 +26,7 @@ import android.text.TextPaint;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RestrictTo;
 import androidx.annotation.VisibleForTesting;
 import androidx.wear.watchface.complications.data.ImageKt;
 import androidx.wear.watchface.complications.data.RangedValueComplicationData;
@@ -45,8 +48,15 @@ import java.util.Objects;
  * instead of "LayoutUtils.getInnerBounds"
  */
 
-@SuppressLint({"RestrictedApi", "VisibleForTests"})
-public class CustomComplicationRenderer extends ComplicationRenderer {
+@SuppressLint("RestrictedApi")
+class CustomComplicationRenderer {
+
+    public interface OnInvalidateListener {
+        void onInvalidate();
+    }
+
+    private static final String TAG = "ComplicationRenderer";
+
     /**
      * When set to true, this class will draw rectangles around every component. It is to see
      * padding and gravity. Testing this class with DEBUG_MODE set to true causes a test to fail so
@@ -173,11 +183,11 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
 
     // Paint sets for active and ambient modes.
     @VisibleForTesting
-    ComplicationRenderer.PaintSet mActivePaintSet = null;
-    ComplicationRenderer.PaintSet mActivePaintSetLostTapAction = null;
+    PaintSet mActivePaintSet = null;
+    PaintSet mActivePaintSetLostTapAction = null;
     @VisibleForTesting
-    ComplicationRenderer.PaintSet mAmbientPaintSet = null;
-    ComplicationRenderer.PaintSet mAmbientPaintSetLostTapAction = null;
+    PaintSet mAmbientPaintSet = null;
+    PaintSet mAmbientPaintSetLostTapAction = null;
 
     // Paints for texts
     @Nullable
@@ -204,14 +214,12 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      */
     CustomComplicationRenderer(
             Context context, ComplicationStyle activeStyle, ComplicationStyle ambientStyle) {
-        super(context, activeStyle, ambientStyle);
-
         mContext = context;
         updateStyle(activeStyle, ambientStyle);
         if (DEBUG_MODE) {
             mDebugPaint = new Paint();
             mDebugPaint.setColor(Color.argb(128, 255, 255, 0));
-            mDebugPaint.setStyle(Paint.Style.STROKE);
+            mDebugPaint.setStyle(Style.STROKE);
         }
     }
 
@@ -226,12 +234,12 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         mActiveStyle = activeStyle;
         mAmbientStyle = ambientStyle;
         // Reset paint sets
-        mActivePaintSet = new ComplicationRenderer.PaintSet(activeStyle, false, false, false);
+        mActivePaintSet = new PaintSet(activeStyle, false, false, false);
         mActivePaintSetLostTapAction =
-                new ComplicationRenderer.PaintSet(activeStyle.asTinted(Color.DKGRAY), false, false, false);
-        mAmbientPaintSet = new ComplicationRenderer.PaintSet(ambientStyle, true, false, false);
+                new PaintSet(activeStyle.asTinted(Color.DKGRAY), false, false, false);
+        mAmbientPaintSet = new PaintSet(ambientStyle, true, false, false);
         mAmbientPaintSetLostTapAction =
-                new ComplicationRenderer.PaintSet(activeStyle.asTinted(Color.DKGRAY), true, false, false);
+                new PaintSet(activeStyle.asTinted(Color.DKGRAY), true, false, false);
         calculateBounds();
     }
 
@@ -410,10 +418,10 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         if (inAmbientMode
                 && (mAmbientPaintSet.mLowBitAmbient != lowBitAmbient
                 || mAmbientPaintSet.mBurnInProtection != burnInProtection)) {
-            mAmbientPaintSet = new ComplicationRenderer.PaintSet(mAmbientStyle, true, lowBitAmbient, burnInProtection);
+            mAmbientPaintSet = new PaintSet(mAmbientStyle, true, lowBitAmbient, burnInProtection);
         }
         // Choose the correct paint set to use
-        ComplicationRenderer.PaintSet currentPaintSet = mComplicationData.getTapActionLostDueToSerialization()
+        PaintSet currentPaintSet = mComplicationData.getTapActionLostDueToSerialization()
                 ? (inAmbientMode ? mAmbientPaintSetLostTapAction : mActivePaintSetLostTapAction) :
                 (inAmbientMode ? mAmbientPaintSet : mActivePaintSet);
         // Update complication texts
@@ -480,7 +488,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
-    private void drawBackground(Canvas canvas, ComplicationRenderer.PaintSet paintSet) {
+    private void drawBackground(Canvas canvas, PaintSet paintSet) {
         int radius = getBorderRadius(paintSet.mStyle);
         canvas.drawRoundRect(mBackgroundBoundsF, radius, radius, paintSet.mBackgroundPaint);
         if (paintSet.mStyle.getBackgroundDrawable() != null
@@ -497,14 +505,14 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
-    private void drawBorders(Canvas canvas, ComplicationRenderer.PaintSet paintSet) {
+    private void drawBorders(Canvas canvas, PaintSet paintSet) {
         if (paintSet.mStyle.getBorderStyle() != ComplicationStyle.BORDER_STYLE_NONE) {
             int radius = getBorderRadius(paintSet.mStyle);
             canvas.drawRoundRect(mBackgroundBoundsF, radius, radius, paintSet.mBorderPaint);
         }
     }
 
-    private void drawHighlight(Canvas canvas, ComplicationRenderer.PaintSet paintSet) {
+    private void drawHighlight(Canvas canvas, PaintSet paintSet) {
         if (!paintSet.mIsAmbientStyle) {
             // Don't draw the highlight in ambient mode
             int radius = getBorderRadius(paintSet.mStyle);
@@ -512,7 +520,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
-    private void drawMainText(Canvas canvas, ComplicationRenderer.PaintSet paintSet, boolean isPlaceholder) {
+    private void drawMainText(Canvas canvas, PaintSet paintSet, boolean isPlaceholder) {
         if (mMainTextBounds.isEmpty()) {
             return;
         }
@@ -548,7 +556,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
-    private void drawSubText(Canvas canvas, ComplicationRenderer.PaintSet paintSet, boolean isPlaceholder) {
+    private void drawSubText(Canvas canvas, PaintSet paintSet, boolean isPlaceholder) {
         if (mSubTextBounds.isEmpty()) {
             return;
         }
@@ -571,7 +579,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
-    private void drawRangedValue(Canvas canvas, ComplicationRenderer.PaintSet paintSet, boolean isPlaceholder) {
+    private void drawRangedValue(Canvas canvas, PaintSet paintSet, boolean isPlaceholder) {
         if (mRangedValueBoundsF.isEmpty()) {
             return;
         }
@@ -629,7 +637,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         mRangedValueBoundsF.inset(-insetAmount, -insetAmount);
     }
 
-    private void drawIcon(Canvas canvas, ComplicationRenderer.PaintSet paintSet, boolean isPlaceholder) {
+    private void drawIcon(Canvas canvas, PaintSet paintSet, boolean isPlaceholder) {
         if (mIconBounds.isEmpty()) {
             return;
         }
@@ -649,7 +657,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
     }
 
-    private void drawSmallImage(Canvas canvas, ComplicationRenderer.PaintSet paintSet, boolean isPlaceholder) {
+    private void drawSmallImage(Canvas canvas, PaintSet paintSet, boolean isPlaceholder) {
         if (mSmallImageBounds.isEmpty()) {
             return;
         }
@@ -685,7 +693,7 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         mRoundedSmallImage.draw(canvas);
     }
 
-    private void drawLargeImage(Canvas canvas, ComplicationRenderer.PaintSet paintSet, boolean isPlaceholder) {
+    private void drawLargeImage(Canvas canvas, PaintSet paintSet, boolean isPlaceholder) {
         if (mLargeImageBounds.isEmpty()) {
             return;
         }
@@ -855,7 +863,8 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
      * Returns true if the data contains images. If there are, the images will be loaded
      * asynchronously and the drawable will be invalidated when loading is complete.
      */
-    private boolean loadDrawableIconAndImagesAsync() {
+    @VisibleForTesting
+    boolean loadDrawableIconAndImagesAsync() {
         Handler handler = new Handler(Looper.getMainLooper());
         Icon icon = null;
         Icon smallImage = null;
@@ -881,11 +890,11 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
         }
 
         boolean hasImage = false;
-        if (icon != null) {
+        if (icon != null && !ImageKt.isPlaceholder(icon)) {
             hasImage = true;
             icon.loadDrawableAsync(
                     mContext,
-                    new Icon.OnDrawableLoadedListener() {
+                    new OnDrawableLoadedListener() {
                         @Override
                         @SuppressLint("SyntheticAccessor")
                         public void onDrawableLoaded(Drawable d) {
@@ -900,11 +909,11 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                     handler);
         }
 
-        if (burnInProtectionIcon != null) {
+        if (burnInProtectionIcon != null && !ImageKt.isPlaceholder(burnInProtectionIcon)) {
             hasImage = true;
             burnInProtectionIcon.loadDrawableAsync(
                     mContext,
-                    new Icon.OnDrawableLoadedListener() {
+                    new OnDrawableLoadedListener() {
                         @Override
                         @SuppressLint("SyntheticAccessor")
                         public void onDrawableLoaded(Drawable d) {
@@ -919,11 +928,11 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                     handler);
         }
 
-        if (smallImage != null) {
+        if (smallImage != null && !ImageKt.isPlaceholder(smallImage)) {
             hasImage = true;
             smallImage.loadDrawableAsync(
                     mContext,
-                    new Icon.OnDrawableLoadedListener() {
+                    new OnDrawableLoadedListener() {
                         @Override
                         @SuppressLint("SyntheticAccessor")
                         public void onDrawableLoaded(Drawable d) {
@@ -937,11 +946,12 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                     handler);
         }
 
-        if (burnInProtectionSmallImage != null) {
+        if (burnInProtectionSmallImage != null
+                && !ImageKt.isPlaceholder(burnInProtectionSmallImage)) {
             hasImage = true;
             burnInProtectionSmallImage.loadDrawableAsync(
                     mContext,
-                    new Icon.OnDrawableLoadedListener() {
+                    new OnDrawableLoadedListener() {
                         @Override
                         @SuppressLint("SyntheticAccessor")
                         public void onDrawableLoaded(Drawable d) {
@@ -955,11 +965,11 @@ public class CustomComplicationRenderer extends ComplicationRenderer {
                     handler);
         }
 
-        if (largeImage != null) {
+        if (largeImage != null && !ImageKt.isPlaceholder(largeImage)) {
             hasImage = true;
             largeImage.loadDrawableAsync(
                     mContext,
-                    new Icon.OnDrawableLoadedListener() {
+                    new OnDrawableLoadedListener() {
                         @Override
                         @SuppressLint("SyntheticAccessor")
                         public void onDrawableLoaded(Drawable d) {

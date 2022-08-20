@@ -188,11 +188,13 @@ import java.time.Instant
  */
 @SuppressLint("RestrictedApi")
 class CustomComplicationDrawable : Drawable {
+    /**
+     * Returns the [Context] used to render the complication.
+     */
     public var context: Context? = null
         private set
 
     /** Returns complication renderer.  */
-    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     @get:JvmName("getComplicationRenderer")
     internal var complicationRenderer: CustomComplicationRenderer? = null
         private set
@@ -208,7 +210,7 @@ class CustomComplicationDrawable : Drawable {
         isHighlighted = false
         invalidateSelf()
     }
-    private val rendererInvalidateListener = OnInvalidateListener { invalidateSelf() }
+    private val rendererInvalidateListener = CustomComplicationRenderer.OnInvalidateListener { invalidateSelf() }
 
     /**
      * The time in milliseconds since the epoch used for rendering [ComplicationData] with time

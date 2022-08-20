@@ -16,18 +16,19 @@
 package com.benoitletondor.pixelminimalwatchface.helper
 
 import android.content.Context
+import android.util.Log
+import com.benoitletondor.pixelminimalwatchface.BuildConfig
+import com.benoitletondor.pixelminimalwatchface.settings.SettingsActivity
+import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.CancellationException
 
 private const val QUERY_BATTERY_ACTIVATED_SYNC_PATH = "/batterySync/activate"
 private const val QUERY_BATTERY_DEACTIVATED_SYNC_PATH = "/batterySync/deactivate"
 
 private const val QUERY_NOTIFICATIONS_ACTIVATED_SYNC_PATH = "/notificationsSync/activate"
 private const val QUERY_NOTIFICATIONS_DEACTIVATED_SYNC_PATH = "/notificationsSync/deactivate"
-
-fun Set<Node>.findBestCompanionNode(): Node? {
-    return firstOrNull { it.isNearby } ?: firstOrNull()
-}
 
 suspend fun Node.startPhoneBatterySync(context: Context) {
     Wearable.getMessageClient(context).sendMessage(
@@ -59,4 +60,22 @@ suspend fun Node.stopNotificationsSync(context: Context) {
         QUERY_NOTIFICATIONS_DEACTIVATED_SYNC_PATH,
         null,
     ).await()
+}
+
+suspend fun CapabilityClient.findBestCompanionNode(): Node? {
+    return try {
+        getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+            .await()
+            .nodes
+            .findBestCompanionNode()
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+
+        Log.e("Capability client", "Error finding companion node", e)
+        null
+    }
+}
+
+fun Set<Node>.findBestCompanionNode(): Node? {
+    return firstOrNull { it.isNearby } ?: firstOrNull()
 }

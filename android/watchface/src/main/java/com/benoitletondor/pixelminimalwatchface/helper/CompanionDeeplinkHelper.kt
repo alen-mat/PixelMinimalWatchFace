@@ -3,54 +3,55 @@ package com.benoitletondor.pixelminimalwatchface.helper
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
-import android.os.Handler
-import android.os.ResultReceiver
-import android.support.wearable.phone.PhoneDeviceType
-import android.support.wearable.view.ConfirmationOverlay
-import android.util.Log
+import androidx.wear.phone.interactions.PhoneTypeHelper
+import androidx.wear.remote.interactions.RemoteActivityHelper
+import androidx.wear.widget.ConfirmationOverlay
 import com.benoitletondor.pixelminimalwatchface.BuildConfig
-import com.benoitletondor.pixelminimalwatchface.DEBUG_LOGS
 import com.benoitletondor.pixelminimalwatchface.R
-import com.google.android.wearable.intent.RemoteIntent
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
+import com.google.android.gms.wearable.CapabilityClient
+import com.google.android.gms.wearable.Wearable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.guava.await
 
-suspend fun Activity.openCompanionAppOnPhone(deeplinkPath: String) = suspendCancellableCoroutine<Boolean> { continuation ->
-    if ( PhoneDeviceType.getPhoneDeviceType(this) == PhoneDeviceType.DEVICE_TYPE_ANDROID ) {
+suspend fun Activity.openCompanionAppOnPhone(
+    deeplinkPath: String,
+    capabilityClient: CapabilityClient = Wearable.getCapabilityClient(this),
+    remoteActivityHelper: RemoteActivityHelper = RemoteActivityHelper(this, Dispatchers.IO.asExecutor()),
+): Boolean {
+    if ( PhoneTypeHelper.getPhoneDeviceType(applicationContext) == PhoneTypeHelper.DEVICE_TYPE_ANDROID ) {
         val intentAndroid = Intent(Intent.ACTION_VIEW)
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .setData(Uri.parse("pixelminimalwatchface://$deeplinkPath"))
             .setPackage(BuildConfig.APPLICATION_ID)
 
-        RemoteIntent.startRemoteActivity(
-            this,
-            intentAndroid,
-            object : ResultReceiver(Handler()) {
-                override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                    if (DEBUG_LOGS) Log.d("openCompanionAppOnPhone", "onReceiveResult: $resultCode / $resultData")
+        val companionNode = capabilityClient.findBestCompanionNode()
+        if (companionNode != null) {
+            try {
+                remoteActivityHelper.startRemoteActivity(
+                    intentAndroid,
+                    companionNode.id,
+                ).await()
 
-                    if (resultCode == RemoteIntent.RESULT_OK) {
-                        ConfirmationOverlay()
-                            .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                            .setDuration(3000)
-                            .setMessage(getString(R.string.open_phone_url_android_device))
-                            .showOn(this@openCompanionAppOnPhone)
-
-                        if (continuation.isActive) {
-                            continuation.resume(true)
-                        }
-                    } else {
-                        if (continuation.isActive) {
-                            continuation.resume(false)
-                        }
+                ConfirmationOverlay()
+                    .setOnAnimationFinishedListener {
+                        finish()
                     }
-                }
+                    .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
+                    .setDuration(3000)
+                    .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
+                    .showOn(this)
+
+                return true
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                return false
             }
-        )
-    } else {
-        if (continuation.isActive) {
-            continuation.resume(false)
+        } else {
+            return false
         }
+    } else {
+        return false
     }
 }

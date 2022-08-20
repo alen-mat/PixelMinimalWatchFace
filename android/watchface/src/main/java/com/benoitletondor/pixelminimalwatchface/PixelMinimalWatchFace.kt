@@ -33,7 +33,10 @@ import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION
+import com.benoitletondor.pixelminimalwatchface.model.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.model.Storage
+import com.benoitletondor.pixelminimalwatchface.model.getBatteryText
+import com.benoitletondor.pixelminimalwatchface.model.getValue
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
 import com.benoitletondor.pixelminimalwatchface.settings.notificationssync.NotificationsSyncConfigurationActivity
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.*
@@ -42,6 +45,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.lang.ref.WeakReference
 import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import java.util.*
 import java.util.concurrent.Executors
 import kotlin.math.max
@@ -59,7 +63,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
     private lateinit var storage: Storage
     private lateinit var complicationsSlots: ComplicationsSlots
-    private lateinit var phoneNotifications: PhoneNotifications
 
     override fun onCreate() {
         super.onCreate()
@@ -67,7 +70,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
         if (DEBUG_LOGS) Log.d(TAG, "onCreate, security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
 
         storage = Injection.storage(this)
-        phoneNotifications = PhoneNotifications(this@PixelMinimalWatchFace)
         ComplicationsProviders.init(this, ComplicationsSlots.COMPLICATION_IDS)
 
         // Set app version to the current one if not set yet (first launch)
@@ -187,11 +189,13 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
         private val batteryPhoneSyncHelper = BatteryPhoneSyncHelper(context, storage)
         private val batteryWatchSyncHelper = BatteryWatchSyncHelper(context, complicationsSlots)
+        private val phoneNotifications: PhoneNotifications
 
         private var lastTapOnCenterOfScreenEventTimestamp: Long = 0
 
         init {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
+            phoneNotifications = PhoneNotifications(context)
 
             watchWatchFaceDrawerChanges()
             watchGalaxyWatch4HRComplications()
@@ -199,6 +203,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchComplicationSlotsRendererInvalidate()
             watchPhoneBatteryHelperRendererInvalidate()
             watchWatchBatteryHelperRendererInvalidate()
+            watchNotificationIconsSyncChanges()
             watchWeatherDataUpdates()
             watchSecondsRingDisplayChanges()
 
@@ -213,6 +218,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
             batteryPhoneSyncHelper.stop()
             batteryWatchSyncHelper.stop()
             watchFaceDrawer.onDestroy()
+            phoneNotifications.onDestroy()
             Wearable.getDataClient(context).removeListener(this)
             Wearable.getMessageClient(context).removeListener(this)
             scope.cancel()
@@ -236,6 +242,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 if (storage.showWeather()) { complicationsSlots.weatherComplicationDataFlow.value } else { null },
                 if (storage.showPhoneBattery()) { batteryPhoneSyncHelper.phoneBatteryStatus.getBatteryText(System.currentTimeMillis()) } else { null },
                 if (storage.showWatchBattery()) { batteryWatchSyncHelper.watchBatteryStatus.getValue() } else { null },
+                if (storage.isNotificationsSyncActivated()) { phoneNotifications.notificationsStateFlow.value } else { null },
             )
 
             if (storage.isUserPremium()) {
@@ -412,6 +419,25 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
+        private fun watchNotificationIconsSyncChanges() {
+            scope.launch {
+                storage.watchIsNotificationsSyncActivated()
+                    .collectLatest { activated ->
+                        if (!activated) {
+                            Log.d(TAG, "Notifications from phone deactivated: invalidate")
+                            invalidate()
+                        } else {
+                            phoneNotifications.notificationsStateFlow
+                                .collect { state ->
+                                    Log.d(TAG, "Notifications from phone received, invalidate: $state")
+                                    invalidate()
+                                }
+                        }
+                    }
+
+            }
+        }
+
         private fun onGalaxyWatch4HeartRateComplicationInactive() {
             if (DEBUG_LOGS) Log.d(TAG, "onGalaxyWatch4HeartRateComplicationInactive")
 
@@ -508,23 +534,6 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     Log.e("PixelWatchFace", "Error while parsing premium status from phone", t)
                     Toast.makeText(context, R.string.premium_error, Toast.LENGTH_LONG).show()
                 }
-            }
-
-            launch {
-                storage.watchIsNotificationsSyncActivated()
-                    .collectLatest { activated ->
-                        if (!activated) {
-                            Log.d(TAG, "Notifications from phone deactivated: invalidate")
-                            invalidate()
-                        } else {
-                            phoneNotifications.notificationsStateFlow
-                                .collect { state ->
-                                    Log.d(TAG, "Notifications from phone received, invalidate: $state")
-                                    invalidate()
-                                }
-                        }
-                    }
-
             }
         }
     }

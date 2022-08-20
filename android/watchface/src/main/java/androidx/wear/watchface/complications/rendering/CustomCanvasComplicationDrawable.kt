@@ -35,7 +35,8 @@ import java.time.ZonedDateTime
         render(canvas, bounds, zonedDateTime, renderParameters, slotId)
     }
  */
-class CustomCanvasComplicationDrawable(
+
+class CustomCanvasComplicationDrawable constructor(
     drawable: CustomComplicationDrawable,
     private val watchState: WatchState,
     private val invalidateCallback: CanvasComplication.InvalidateCallback
@@ -89,21 +90,6 @@ class CustomCanvasComplicationDrawable(
             value.isBurnInProtectionOn = watchState.hasBurnInProtection
         }
 
-    fun render(
-        canvas: Canvas,
-        bounds: Rect,
-        zonedDateTime: ZonedDateTime,
-        renderParameters: RenderParameters,
-        slotId: Int,
-        overrideComplicationData: ComplicationData?,
-    ) {
-        if (overrideComplicationData != null && drawable.complicationData != overrideComplicationData) {
-            drawable.setComplicationData(overrideComplicationData, false)
-        }
-
-        render(canvas, bounds, zonedDateTime, renderParameters, slotId)
-    }
-
     override fun render(
         canvas: Canvas,
         bounds: Rect,
@@ -124,6 +110,21 @@ class CustomCanvasComplicationDrawable(
             zonedDateTime.toInstant().toEpochMilli() in startTime until endTime
         } ?: false
         drawable.draw(canvas)
+    }
+
+    fun render(
+        canvas: Canvas,
+        bounds: Rect,
+        zonedDateTime: ZonedDateTime,
+        renderParameters: RenderParameters,
+        slotId: Int,
+        overrideComplicationData: ComplicationData?,
+    ) {
+        if (overrideComplicationData != null && drawable.complicationData != overrideComplicationData) {
+            drawable.setComplicationData(overrideComplicationData, false)
+        }
+
+        render(canvas, bounds, zonedDateTime, renderParameters, slotId)
     }
 
     override fun drawHighlight(

@@ -55,6 +55,7 @@ import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
 import com.benoitletondor.pixelminimalwatchface.settings.WidgetConfigurationActivity.Companion.RESULT_RELAUNCH
+import com.benoitletondor.pixelminimalwatchface.settings.notificationssync.NotificationsSyncConfigurationActivity
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Node
@@ -326,7 +327,9 @@ class SettingsActivity : ComponentActivity() {
                         startActivityForResult(
                             ComplicationHelperActivity.createPermissionRequestHelperIntent(
                                 context,
-                                watchFaceComponentName
+                                watchFaceComponentName,
+                                null,
+                                null,
                             ),
                             COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE
                         )
@@ -469,7 +472,9 @@ class SettingsActivity : ComponentActivity() {
                                 startActivityForResult(
                                     ComplicationHelperActivity.createPermissionRequestHelperIntent(
                                         context,
-                                        watchFaceComponentName
+                                        watchFaceComponentName,
+                                        null,
+                                        null,
                                     ),
                                     COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE
                                 )
@@ -896,7 +901,12 @@ class SettingsActivity : ComponentActivity() {
         } else if( requestCode == COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE ) {
             val granted = isPermissionGranted("com.google.android.wearable.permission.RECEIVE_COMPLICATION_DATA")
             storage.setShowWatchBattery(granted)
-        } else if ( requestCode == TIME_AND_DATE_COLOR_REQUEST_CODE && resultCode == RESULT_OK ) {
+        } else if ( requestCode == TIME_COLOR_REQUEST_CODE && resultCode == RESULT_OK ) {
+            val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
+            if (color != null) {
+                storage.setTimeColor(color.color)
+            }
+        } else if ( requestCode == DATE_COLOR_REQUEST_CODE && resultCode == RESULT_OK ) {
             val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
             if (color != null) {
                 storage.setDateColor(color.color)
@@ -928,75 +938,18 @@ class SettingsActivity : ComponentActivity() {
     }
 
     private fun openAppOnPhone() {
-        if ( PhoneTypeHelper.getPhoneDeviceType(applicationContext) == PhoneTypeHelper.DEVICE_TYPE_ANDROID ) {
-            val intentAndroid = Intent(Intent.ACTION_VIEW)
-                .addCategory(Intent.CATEGORY_BROWSABLE)
-                .setData(Uri.parse("pixelminimalwatchface://open"))
-                .setPackage(BuildConfig.APPLICATION_ID)
-
-            lifecycleScope.launch {
-                val companionNode = capabilityClient.findCompanionNode()
-                if (companionNode != null) {
-                    try {
-                        remoteActivityHelper.startRemoteActivity(
-                            intentAndroid,
-                            companionNode.id,
-                        ).await()
-
-                        ConfirmationOverlay()
-                            .setOnAnimationFinishedListener {
-                                finish()
-                            }
-                            .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                            .setDuration(3000)
-                            .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
-                            .showOn(this@SettingsActivity)
-                    } catch (e: Exception) {
-                        if (e is CancellationException) throw e
-                        openAppInStoreOnPhone()
-                    }
-
-                } else {
-                    openAppInStoreOnPhone()
-                }
+        lifecycleScope.launch {
+            if (!openCompanionAppOnPhone("open", capabilityClient, remoteActivityHelper)) {
+                openAppInStoreOnPhone()
             }
-        } else {
-            openAppInStoreOnPhone()
         }
     }
 
     private fun openAppForDonationOnPhone() {
-        if ( PhoneTypeHelper.getPhoneDeviceType(applicationContext) == PhoneTypeHelper.DEVICE_TYPE_ANDROID ) {
-            val intentAndroid = Intent(Intent.ACTION_VIEW)
-                .addCategory(Intent.CATEGORY_BROWSABLE)
-                .setData(Uri.parse("pixelminimalwatchface://donate"))
-
-            lifecycleScope.launch {
-                val companionNode = capabilityClient.findCompanionNode()
-                if (companionNode != null) {
-                    try {
-                        remoteActivityHelper.startRemoteActivity(
-                            intentAndroid,
-                            companionNode.id,
-                        ).await()
-
-                        ConfirmationOverlay()
-                            .setType(ConfirmationOverlay.OPEN_ON_PHONE_ANIMATION)
-                            .setDuration(3000)
-                            .setMessage(getString(R.string.open_phone_url_android_device) as CharSequence)
-                            .showOn(this@SettingsActivity)
-                    } catch (e: Exception) {
-                        if (e is CancellationException) throw e
-
-                        Log.e(TAG, "Error opening app for donation on phone", e)
-                        openAppInStoreOnPhone(finish = false)
-                    }
-                } else {
-                    openAppInStoreOnPhone(finish = false)
-                }
+        lifecycleScope.launch {
+            if(!openCompanionAppOnPhone("donate", capabilityClient, remoteActivityHelper)) {
+                openAppInStoreOnPhone(finish = false)
             }
-        } else {
-            openAppInStoreOnPhone(finish = false)
         }
     }
 
@@ -1044,20 +997,6 @@ class SettingsActivity : ComponentActivity() {
             PhoneTypeHelper.DEVICE_TYPE_UNKNOWN, PhoneTypeHelper.DEVICE_TYPE_ERROR -> {
                 Toast.makeText(this@SettingsActivity, R.string.open_phone_url_android_device_failure, Toast.LENGTH_LONG).show()
             }
-        }
-    }
-
-    private suspend fun CapabilityClient.findCompanionNode(): Node? {
-        return try {
-            getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
-                .await()
-                .nodes
-                .firstOrNull { it.isNearby }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-
-            Log.e(TAG, "Error finding companion node", e)
-            null
         }
     }
 

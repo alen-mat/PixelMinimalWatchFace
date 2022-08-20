@@ -244,17 +244,17 @@ class RegularDigitalWatchFaceDrawer(
         timePaint.apply {
             isAntiAlias = !(ambient && lowBitAmbient)
             style = if(shouldUseStrokeStyle) { Paint.Style.STROKE } else { Paint.Style.FILL }
-            color = if( ambient ) { timeColorDimmed } else { storage.getTimeAndDateColor() }
+            color = if( ambient ) { timeColorDimmed } else { storage.getTimeColor() }
         }
 
         datePaint.apply {
             isAntiAlias = !(ambient && lowBitAmbient)
-            color = if( ambient ) { dateAndBatteryColorDimmed } else { storage.getTimeAndDateColor() }
+            color = if( ambient ) { dateAndBatteryColorDimmed } else { storage.getDateColor() }
         }
 
         weatherIconPaint.apply {
             isAntiAlias = !ambient
-            colorFilter = if( ambient ) { weatherAndBatteryIconColorFilterDimmed } else { storage.getTimeAndDateColorFilter() }
+            colorFilter = if( ambient ) { weatherAndBatteryIconColorFilterDimmed } else { storage.getDateColorFilter() }
         }
 
         batteryLevelPaint.apply {
@@ -323,7 +323,7 @@ class RegularDigitalWatchFaceDrawer(
 
         val sizeOfComplication = if(context.resources.configuration.isScreenRound) { ((screenWidth / 4.5) * widgetsScaleFactor).toInt() } else { (min(topBottom.toInt() - topAndBottomMargins - context.dpToPx(2), (screenWidth / 3.5).toInt()) * widgetsScaleFactor).toInt() }
         // If watch is round, align top widgets with the top of the time, otherwise center them in the top space
-        val verticalOffset = if ( isRound ) { topBottom.toInt() - sizeOfComplication - context.resources.getDimensionPixelSize(R.dimen.space_between_time_and_top_widgets) } else { topAndBottomMargins + ((topBottom.toInt() - topAndBottomMargins) / 2) - (sizeOfComplication / 2) }
+        val verticalOffset = if (context.resources.configuration.isScreenRound) { topBottom.toInt() - sizeOfComplication - context.resources.getDimensionPixelSize(R.dimen.space_between_time_and_top_widgets) } else { topAndBottomMargins + ((topBottom.toInt() - topAndBottomMargins) / 2) - (sizeOfComplication / 2) }
         val distanceBetweenComplications = context.dpToPx(3)
 
         val maxWidth = max(sizeOfComplication, wearOsImage.width)
@@ -378,9 +378,9 @@ class RegularDigitalWatchFaceDrawer(
             iconXOffset,
             iconYOffset.toFloat(),
             notificationsRect = Rect(
-                if (isRound) { (screenWidth / 7f).toInt() } else { context.dpToPx(15) },
+                if (context.resources.configuration.isScreenRound) { (screenWidth / 7f).toInt() } else { context.dpToPx(15) },
                 bottomTop.toInt(),
-                if (isRound) { screenWidth - (screenWidth / 7f).toInt() } else { screenWidth - context.dpToPx(15) },
+                if (context.resources.configuration.isScreenRound) { screenWidth - (screenWidth / 7f).toInt() } else { screenWidth - context.dpToPx(15) },
                 bottomTop.toInt() + availableBottomSpace.toInt() - batteryIconSize - context.dpToPx(2),
             ),
         )
@@ -414,7 +414,7 @@ class RegularDigitalWatchFaceDrawer(
         val timeXOffset = centerX - (timePaint.measureText(timeText) / 2f)
         canvas.drawText(timeText, timeXOffset, timeYOffset, timePaint)
 
-        if( storage.showWearOSLogo() ) {
+        if( storage.showWearOSLogo() && (!ambient || storage.getShowWearOSLogoInAmbient()) ) {
             val wearOsImage = if( ambient ) { wearOSLogoAmbient } else { wearOSLogo }
             canvas.drawBitmap(wearOsImage, complicationsDrawingCache.iconXOffset, complicationsDrawingCache.iconYOffset, wearOSLogoPaint)
         }

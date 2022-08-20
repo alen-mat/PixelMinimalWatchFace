@@ -21,9 +21,6 @@ import com.benoitletondor.pixelminimalwatchface.BuildConfig
 import com.benoitletondor.pixelminimalwatchface.PixelMinimalWatchFace.Companion.HALF_HOUR_MS
 import com.benoitletondor.pixelminimalwatchface.model.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.model.Storage
-import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.findBestNode
-import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.startPhoneBatterySync
-import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.stopPhoneBatterySync
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.*
@@ -89,14 +86,12 @@ class BatteryPhoneSyncHelper(
         try {
             Log.d(TAG, "syncPhoneBatteryStatus. showPhoneBattery: ${storage.showPhoneBattery()}")
             
-            val capabilityInfo = withTimeout(5000) {
-                Wearable.getCapabilityClient(this@syncPhoneBatteryStatus).getCapability(BuildConfig.COMPANION_APP_CAPABILITY, CapabilityClient.FILTER_REACHABLE).await()
-            }
+            val capabilityClient = Wearable.getCapabilityClient(this@syncPhoneBatteryStatus)
 
             if (storage.showPhoneBattery()) {
-                capabilityInfo.nodes.findBestNode()?.startPhoneBatterySync(this@syncPhoneBatteryStatus)
+                capabilityClient.findBestCompanionNode()?.startPhoneBatterySync(this@syncPhoneBatteryStatus)
             } else {
-                capabilityInfo.nodes.findBestNode()?.stopPhoneBatterySync(this@syncPhoneBatteryStatus)
+                capabilityClient.findBestCompanionNode()?.stopPhoneBatterySync(this@syncPhoneBatteryStatus)
             }
         } catch (t: Throwable) {
             if (t is CancellationException) throw t

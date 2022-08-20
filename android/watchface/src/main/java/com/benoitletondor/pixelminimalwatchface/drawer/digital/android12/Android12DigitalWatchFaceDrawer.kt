@@ -28,6 +28,7 @@ import androidx.wear.watchface.WatchState
 import androidx.wear.watchface.style.CurrentUserStyleRepository
 import com.benoitletondor.pixelminimalwatchface.ComplicationsSlots
 import com.benoitletondor.pixelminimalwatchface.DEBUG_LOGS
+import com.benoitletondor.pixelminimalwatchface.PhoneNotifications
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
@@ -35,6 +36,7 @@ import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import java.time.ZonedDateTime
@@ -113,7 +115,7 @@ class Android12DigitalWatchFaceDrawer(
         watchUserStyleChanges()
         watchShowBatteryIndicatorsChanges()
         watchShowWearOSLogoChanges()
-        watchShowNotificationIconsChanges()
+        watchNotificationIconsSyncChanges()
     }
 
     override fun onDestroy() {
@@ -171,7 +173,9 @@ class Android12DigitalWatchFaceDrawer(
         bounds: Rect,
         zonedDateTime: ZonedDateTime,
         weatherComplicationData: ComplicationData?,
-
+        phoneBatteryValue: String?,
+        watchBatteryValue: Int?,
+        notificationsState: PhoneNotifications.NotificationState?,
     ) {
         val ambient = watchState.isAmbient.value == true
 
@@ -195,6 +199,7 @@ class Android12DigitalWatchFaceDrawer(
                 weatherComplicationData,
                 watchBatteryValue,
                 phoneBatteryValue,
+                notificationsState,
             )
         }
     }
@@ -248,6 +253,15 @@ class Android12DigitalWatchFaceDrawer(
             storage.watchShowWearOSLogo()
                 .drop(1) // Ignore first value
                 .collect {
+                    recomputeDrawingStateAndReRender()
+                }
+        }
+    }
+
+    private fun watchNotificationIconsSyncChanges() {
+        scope.launch {
+            storage.watchIsNotificationsSyncActivated()
+                .collectLatest {
                     recomputeDrawingStateAndReRender()
                 }
         }
@@ -532,7 +546,7 @@ class Android12DigitalWatchFaceDrawer(
             )
         }
 
-        val drawWearOSLogo = drawWearOsLogo = storage.showWearOSLogo() && (!isUserPremium || notificationsState == null) && (!ambient || storage.getShowWearOSLogoInAmbient())
+        val drawWearOSLogo = storage.showWearOSLogo() && (!isUserPremium || notificationsState == null) && (!ambient || storage.getShowWearOSLogoInAmbient())
         if (drawWearOSLogo) {
             val wearOsImage = if( ambient ) { complicationsDrawingCache.wearOSLogoAmbient } else { complicationsDrawingCache.wearOSLogo }
             canvas.drawBitmap(wearOsImage, null, complicationsDrawingCache.wearOSLogoRect, wearOSLogoPaint)
