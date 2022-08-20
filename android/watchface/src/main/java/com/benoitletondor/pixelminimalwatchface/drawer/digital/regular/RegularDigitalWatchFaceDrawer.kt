@@ -90,6 +90,7 @@ class RegularDigitalWatchFaceDrawer(
         strokeWidth = 10F
         isAntiAlias = true
     }
+    private val notificationsPaint = Paint()
     private val distanceBetweenPhoneAndWatchBattery: Int = context.dpToPx(3)
     private val timeFormatter24H = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
     private val timeFormatter12H = DateTimeFormatter.ofPattern("h:mm", Locale.getDefault())
@@ -188,6 +189,12 @@ class RegularDigitalWatchFaceDrawer(
         return drawingState.tapIsOnBattery(tapEvent.xPos, tapEvent.yPos)
     }
 
+    override fun isTapOnNotifications(x: Int, y: Int): Boolean {
+        val drawingState = drawingState as? RegularDrawerDrawingState.CacheAvailable ?: return false
+
+        return drawingState.isTapOnNotifications(x, y)
+    }
+
     override fun draw(
         canvas: Canvas,
         bounds: Rect,
@@ -195,6 +202,7 @@ class RegularDigitalWatchFaceDrawer(
         weatherComplicationData: ComplicationData?,
         phoneBatteryValue: String?,
         watchBatteryValue: Int?,
+        notificationsState: PhoneNotifications.NotificationState?,
     ) {
         val isAmbient = watchState.isAmbient.value == true
         setPaintVariables(
@@ -221,6 +229,7 @@ class RegularDigitalWatchFaceDrawer(
                 weatherComplicationData,
                 watchBatteryValue,
                 phoneBatteryValue,
+                notificationsState,
             )
         }
     }
@@ -272,13 +281,13 @@ class RegularDigitalWatchFaceDrawer(
         val timeTextBounds = Rect().apply {
             timePaint.getTextBounds(timeText, 0, timeText.length, this)
         }
-        val timeYOffset = centerY + (timeTextBounds.height() / 2.0f ) - 5f
+        val timeYOffset = centerY + (timeTextBounds.height() / 2.0f ) + context.resources.getDimensionPixelSize(R.dimen.time_y_offset)
 
         val dateText = "May, 15"
         val dateTextHeight = Rect().apply {
             datePaint.getTextBounds(dateText, 0, dateText.length, this)
         }.height()
-        val dateYOffset = timeYOffset + (timeTextBounds.height() / 2) - (dateTextHeight / 2.0f ) + context.dpToPx(8)
+        val dateYOffset = timeYOffset + (timeTextBounds.height() / 2) - (dateTextHeight / 2.0f ) + context.resources.getDimensionPixelSize(R.dimen.space_between_time_and_date)
 
         val complicationsDrawingCache = buildComplicationDrawingCache(
             timeYOffset - timeTextBounds.height(),
@@ -314,7 +323,7 @@ class RegularDigitalWatchFaceDrawer(
 
         val sizeOfComplication = if(context.resources.configuration.isScreenRound) { ((screenWidth / 4.5) * widgetsScaleFactor).toInt() } else { (min(topBottom.toInt() - topAndBottomMargins - context.dpToPx(2), (screenWidth / 3.5).toInt()) * widgetsScaleFactor).toInt() }
         // If watch is round, align top widgets with the top of the time, otherwise center them in the top space
-        val verticalOffset = if (context.resources.configuration.isScreenRound) { topBottom.toInt() - sizeOfComplication - context.dpToPx(6) } else { topAndBottomMargins + ((topBottom.toInt() - topAndBottomMargins) / 2) - (sizeOfComplication / 2) }
+        val verticalOffset = if ( isRound ) { topBottom.toInt() - sizeOfComplication - context.resources.getDimensionPixelSize(R.dimen.space_between_time_and_top_widgets) } else { topAndBottomMargins + ((topBottom.toInt() - topAndBottomMargins) / 2) - (sizeOfComplication / 2) }
         val distanceBetweenComplications = context.dpToPx(3)
 
         val maxWidth = max(sizeOfComplication, wearOsImage.width)
@@ -367,7 +376,13 @@ class RegularDigitalWatchFaceDrawer(
 
         return ComplicationsDrawingCache(
             iconXOffset,
-            iconYOffset.toFloat()
+            iconYOffset.toFloat(),
+            notificationsRect = Rect(
+                if (isRound) { (screenWidth / 7f).toInt() } else { context.dpToPx(15) },
+                bottomTop.toInt(),
+                if (isRound) { screenWidth - (screenWidth / 7f).toInt() } else { screenWidth - context.dpToPx(15) },
+                bottomTop.toInt() + availableBottomSpace.toInt() - batteryIconSize - context.dpToPx(2),
+            ),
         )
     }
 
@@ -389,6 +404,7 @@ class RegularDigitalWatchFaceDrawer(
         weatherComplicationData: ComplicationData?,
         watchBatteryValue: Int?,
         phoneBatteryValue: String?,
+        notificationsState: PhoneNotifications.NotificationState?,
     ) {
         val timeText = if( storage.getUse24hTimeFormat()) {
             timeFormatter24H.format(date)
@@ -430,6 +446,10 @@ class RegularDigitalWatchFaceDrawer(
                 watchBatteryValue,
                 phoneBatteryValue,
             )
+        }
+
+        if (isUserPremium && notificationsState != null && (!ambient || storage.getShowNotificationsInAmbient())) {
+            drawNotifications(canvas, notificationsPaint, notificationsState)
         }
     }
 

@@ -81,8 +81,9 @@
 
         <activity
             android:name=".FeatureDropActivity"
-            android:label="@string/feature_drop_2021_notification_title"
-            android:exported="false"/>
+            android:label="@string/feature_drop_notification_title"/>
+
+        <activity android:name=".settings.notificationssync.betadisclaimer.BetaDisclaimerActivity" />
 
         <activity
             android:name=".FullBrightnessActivity"
@@ -131,6 +132,10 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <activity android:name=".settings.notificationssync.NotificationsSyncConfigurationActivity" />
+
+        <activity android:name=".settings.notificationssync.troubleshoot.NotificationsSyncTroubleshootActivity" />
 
         <meta-data
             android:name="com.google.android.wearable.standalone"

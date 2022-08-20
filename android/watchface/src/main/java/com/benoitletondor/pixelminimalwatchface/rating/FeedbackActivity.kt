@@ -91,8 +91,8 @@ class FeedbackActivity : ComponentActivity() {
         onNegativeButtonPressed: () -> Unit,
     ) {
         WearTheme {
-            RotatoryAwareScalingLazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp),
+            RotatoryAwareLazyColumn(
+                horizontalPadding = 20.dp,
             ) {
                 item {
                     Text(
@@ -146,8 +146,8 @@ class FeedbackActivity : ComponentActivity() {
     @Composable
     private fun NegativeStep() {
         WearTheme {
-            RotatoryAwareScalingLazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp),
+            RotatoryAwareLazyColumn(
+                horizontalPadding = 20.dp,
             ) {
                 item {
                     Text(
@@ -253,8 +253,8 @@ class FeedbackActivity : ComponentActivity() {
     @Composable
     private fun PositiveStep() {
         WearTheme {
-            RotatoryAwareScalingLazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp),
+            RotatoryAwareLazyColumn(
+                horizontalPadding = 20.dp,
             ) {
                 item {
                     Text(

@@ -26,6 +26,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,9 +124,11 @@ class SettingsActivity : ComponentActivity() {
         val isUserPremium by storage.watchIsUserPremium().collectAsState(storage.isUserPremium())
         val showWatchBattery by storage.watchShowWatchBattery().collectAsState(storage.showWatchBattery())
         val showPhoneBattery by storage.watchShowPhoneBattery().collectAsState(storage.showPhoneBattery())
+        val showNotifications by storage.watchIsNotificationsSyncActivated().collectAsState(storage.isNotificationsSyncActivated())
+        val showWearOSLogo by storage.watchShowWearOSLogo().collectAsState(storage.showWearOSLogo())
 
         WearTheme {
-            RotatoryAwareScalingLazyColumn {
+            RotatoryAwareLazyColumn {
                 item(key = "Title") {
                     Text(
                         text = "Pixel Minimal Watch Face",
@@ -143,408 +146,49 @@ class SettingsActivity : ComponentActivity() {
                         modifier = Modifier.padding(top = 10.dp),
                     )
                 }
-                item(key = "WidgetsSection") { SettingSectionItem(label = "Widgets") }
+
+                WidgetsOrBecomePremiumSection(
+                    isUserPremium = isUserPremium,
+                    useAndroid12 = useAndroid12,
+                    showPhoneBattery = showPhoneBattery,
+                    showWatchBattery = showWatchBattery,
+                    showNotifications = showNotifications,
+                    showWearOSLogo = showWearOSLogo,
+                )
 
                 if (isUserPremium) {
-                    if (useAndroid12) {
-                        item(key = "Android12Complications") {
-                            Android12Complications()
-                        }
-                    } else {
-                        item(key = "RegularComplications") {
-                            RegularComplications(
-                                showBattery = showPhoneBattery || showWatchBattery,
-                            )
-                        }
-                    }
-
-                    item(key = "WidgetSize") {
-                        val widgetsSize by storage.watchWidgetsSize().collectAsState(storage.getWidgetsSize())
-
-                        SettingSlider(
-                            iconDrawable = R.drawable.ic_baseline_photo_size_select_small_24,
-                            onValueChange = { newValue ->
-                                storage.setWidgetsSize(newValue)
-                            },
-                            value = widgetsSize,
-                            title = "Size of widgets: ${context.fontDisplaySizeToHumanReadableString(widgetsSize)}",
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                    }
-                } else {
-                    item(key = "PremiumCompanion") {
-                        Column {
-                            Text(
-                                text = "To setup widgets, display weather info and battery indicators you have to become a premium user.",
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillParentMaxWidth(),
-                            )
-
-                            Text(
-                                text = "Install the companion app on your phone to continue",
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillParentMaxWidth(),
-                            )
-
-                            Chip(
-                                label = { Text("Open companion app on phone") },
-                                onClick = ::openAppOnPhone,
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_phonelink_setup_white),
-                                        contentDescription = null,
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-
-                item(key = "ShowWearOSLogo") {
-                    val showWearOSLogo by storage.watchShowWearOSLogo().collectAsState(storage.showWearOSLogo())
-
-                    SettingToggleChip(
-                        label = if (useAndroid12 || !isUserPremium) { "Show WearOS logo" } else { "WearOS logo as middle widget" },
-                        checked = showWearOSLogo,
-                        onCheckedChange = { storage.setShowWearOSLogo(it) },
-                        iconDrawable = R.drawable.ic_wear_os_logo_white,
-                        modifier = Modifier.padding(top = 10.dp),
+                    BatteryIndicatorSection(
+                        useAndroid12 = useAndroid12,
+                        showWatchBattery = showWatchBattery,
                     )
                 }
 
                 if (isUserPremium) {
-                    item(key = "BatteryIndicatorSection") {
-                        SettingSectionItem(
-                            label = "Display battery status",
-                            includeBottomPadding = false,
-                        )
-                    }
-
-                    if (!useAndroid12) {
-                        item(key = "BatteryIndicatorBottomWidgetWarning") {
-                            Text(
-                                text = "Activating any battery indicator replaces the bottom widget",
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp,
-                            )
-                        }
-                    }
-
-                    item(key = "WatchBatteryIndicator") {
-                        SettingToggleChip(
-                            label = "Watch battery indicator",
-                            checked = showWatchBattery,
-                            onCheckedChange = { showBattery ->
-                                if (showBattery) {
-                                    startActivityForResult(
-                                        ComplicationHelperActivity.createPermissionRequestHelperIntent(
-                                            context,
-                                            watchFaceComponentName,
-                                            null,
-                                            null,
-                                        ),
-                                        COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE,
-                                    )
-                                } else {
-                                    storage.setShowWatchBattery(false)
-                                }
-                            },
-                            iconDrawable = R.drawable.ic_baseline_battery_charging_full,
-                            modifier = Modifier.padding(top = 10.dp),
-                        )
-                    }
-
-                    item(key = "PhoneBatteryIndicator") {
-                        SettingChip(
-                            label = "(Beta) Phone battery indicator setup",
-                            onClick = {
-                                startActivityForResult(
-                                    Intent(this@SettingsActivity, PhoneBatteryConfigurationActivity::class.java),
-                                    COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE,
-                                )
-                            },
-                            iconDrawable = R.drawable.ic_phone,
-                        )
-                    }
-
-                    item(key = "BatteryIndicatorsColor") {
-                        SettingChip(
-                            label = "Battery indicators colors (doesn't affect ambient mode)",
-                            onClick = {
-                                startActivityForResult(
-                                    ColorSelectionActivity.createIntent(
-                                        this@SettingsActivity,
-                                        ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
-                                    ),
-                                    BATTERY_COLOR_REQUEST_CODE
-                                )
-                            },
-                            iconDrawable = R.drawable.ic_palette_24,
-                            modifier = Modifier.heightIn(min = 70.dp),
-                        )
-                    }
-                }
-
-                item(key = "DateTimeSection") {
-                    SettingSectionItem(
-                        label = "Time and date",
-                        includeBottomPadding = false,
+                    NotificationsDisplaySection(
+                        useAndroid12 = useAndroid12,
                     )
                 }
 
-                item(key = "ShortDateFormat") {
-                    val useShortDateFormat by storage.watchUseShortDateFormat().collectAsState(storage.getUseShortDateFormat())
+                DateTimeSection(
+                    isUserPremium = isUserPremium,
+                    isScreenRound = isScreenRound,
+                    weatherProviderInfo = weatherProviderInfo,
+                )
 
-                    SettingToggleChip(
-                        label = "Use short date format",
-                        checked = useShortDateFormat,
-                        onCheckedChange = { storage.setUseShortDateFormat(it) },
-                        iconDrawable = R.drawable.ic_baseline_short_text,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
+                TimeStyleSection()
 
-                if( isUserPremium && weatherProviderInfo != null ) {
-                    item(key = "ShowWeather") {
-                        val showWeather by storage.watchShowWeather().collectAsState(storage.showWeather())
+                AmbientSection(
+                    isUserPremium = isUserPremium,
+                    showWatchBattery = showWatchBattery,
+                    showPhoneBattery = showPhoneBattery,
+                    showNotifications = showNotifications,
+                    useAndroid12 = useAndroid12,
+                    showWearOSLogo = showWearOSLogo,
+                )
 
-                        Column {
-                            SettingToggleChip(
-                                label = "Show weather after date",
-                                checked = showWeather,
-                                onCheckedChange = { showWeather ->
-                                    if (showWeather) {
-                                        startActivityForResult(
-                                            ComplicationHelperActivity.createPermissionRequestHelperIntent(
-                                                context,
-                                                watchFaceComponentName,
-                                                null,
-                                                null,
-                                            ),
-                                            COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE
-                                        )
-                                    } else {
-                                        storage.setShowWeather(false)
-                                    }
-                                },
-                                iconDrawable = R.drawable.ic_weather_partly_cloudy,
-                            )
-
-                            if (showWeather) {
-                                Text(
-                                    text = "Temperature scale (°F or °C) is controlled by the Weather app.",
-                                    fontSize = 12.sp,
-                                    lineHeight = 14.sp,
-                                    color = Color.Gray,
-                                    modifier = Modifier.padding(start = 40.dp, bottom = 4.dp),
-                                )
-
-                                SettingChip(
-                                    label = "Open Weather app for setup",
-                                    onClick = {
-                                        weatherProviderInfo.let { weatherProviderInfo ->
-                                            openActivity(weatherProviderInfo.appPackage, weatherProviderInfo.weatherActivityName)
-                                        }
-                                    },
-                                    iconDrawable = null,
-                                    modifier = Modifier.padding(start = 40.dp, bottom = 8.dp),
-                                )
-                            }
-                        }
-
-                    }
-                }
-
-                item(key = "24hTimeFormatSetting") {
-                    val use24hTimeFormat by storage.watchUse24hTimeFormat().collectAsState(storage.getUse24hTimeFormat())
-
-                    SettingToggleChip(
-                        label = "Use 24h time format",
-                        checked = use24hTimeFormat,
-                        onCheckedChange = { storage.setUse24hTimeFormat(it) },
-                        iconDrawable = R.drawable.ic_access_time,
-                    )
-                }
-
-                item(key = "TimeSize") {
-                    val timeSize by storage.watchTimeSize().collectAsState(storage.getTimeSize())
-
-                    SettingSlider(
-                        iconDrawable = R.drawable.ic_baseline_format_size,
-                        onValueChange = { newValue ->
-                            storage.setTimeSize(newValue)
-                        },
-                        value = timeSize,
-                        title = "Size of time: ${context.fontDisplaySizeToHumanReadableString(timeSize)}",
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-
-                item(key = "DateAndBatterySize") {
-                    val dateAndBatterySize by storage.watchDateAndBatterySize().collectAsState(storage.getDateAndBatterySize())
-
-                    SettingSlider(
-                        iconDrawable = R.drawable.ic_baseline_format_size,
-                        onValueChange = { newValue ->
-                            storage.setDateAndBatterySize(newValue)
-                        },
-                        value = dateAndBatterySize,
-                        title = "Size of date & battery: ${context.fontDisplaySizeToHumanReadableString(dateAndBatterySize)}",
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-
-                item(key = "TimeDataColor") {
-                    SettingChip(
-                        label = "Time and date color (doesn't affect ambient mode)",
-                        onClick = {
-                            startActivityForResult(
-                                ColorSelectionActivity.createIntent(
-                                    this@SettingsActivity,
-                                    ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
-                                ),
-                                TIME_AND_DATE_COLOR_REQUEST_CODE
-                            )
-                        },
-                        iconDrawable = R.drawable.ic_palette_24,
-                        modifier = Modifier
-                            .padding(top = 10.dp)
-                            .heightIn(min = 70.dp),
-                    )
-                }
-
-                if( isScreenRound ) {
-                    item(key = "ShowSecondsRing") {
-                        val showSecondsRing by storage.watchShowSecondsRing().collectAsState(storage.showSecondsRing())
-
-                        Column {
-                            SettingToggleChip(
-                                label = "Show seconds ring",
-                                checked = showSecondsRing,
-                                onCheckedChange = { storage.setShowSecondsRing(it) },
-                                iconDrawable = R.drawable.ic_baseline_panorama_fish_eye,
-                            )
-
-                            if (showSecondsRing) {
-                                SettingChip(
-                                    label = "Seconds ring color",
-                                    onClick = {
-                                        startActivityForResult(
-                                            ColorSelectionActivity.createIntent(
-                                                this@SettingsActivity,
-                                                ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
-                                            ),
-                                            SECONDS_RING_COLOR_REQUEST_CODE
-                                        )
-                                    },
-                                    iconDrawable = R.drawable.ic_palette_24,
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                item(key = "TimeStyleSection") {
-                    SettingSectionItem(
-                        label = "Time style",
-                    )
-                }
-
-                item(key = "ThinTimeWatchOn") {
-                    val useThinTimeStyleInRegularMode by storage.watchUseThinTimeStyleInRegularMode().collectAsState(storage.useThinTimeStyleInRegularMode())
-
-                    SettingToggleChip(
-                        label = "Use thin time style when watch is on",
-                        checked = useThinTimeStyleInRegularMode,
-                        onCheckedChange = { storage.setUseThinTimeStyleInRegularMode(it) },
-                        iconDrawable = R.drawable.ic_baseline_invert_colors,
-                        modifier = Modifier.heightIn(min = 70.dp),
-                    )
-                }
-
-                item(key = "NormalTimeWatchOff") {
-                    val useNormalTimeStyleInAmbientMode by storage.watchUseNormalTimeStyleInAmbientMode().collectAsState(storage.useNormalTimeStyleInAmbientMode())
-
-                    SettingToggleChip(
-                        label = "Use normal in place of thin time style in ambient mode",
-                        checked = useNormalTimeStyleInAmbientMode,
-                        onCheckedChange = { storage.setUseNormalTimeStyleInAmbientMode(it) },
-                        iconDrawable = R.drawable.ic_baseline_invert_colors_off,
-                        modifier = Modifier.heightIn(min = 70.dp),
-                    )
-                }
-
-                item(key = "AmbientSection") {
-                    SettingSectionItem(
-                        label = "Ambient mode",
-                    )
-                }
-
-                item(key = "ShowDateInAmbientMode") {
-                    val showDateInAmbient by storage.watchShowDateInAmbient().collectAsState(storage.getShowDateInAmbient())
-
-                    SettingToggleChip(
-                        label = "Show date in ambient mode",
-                        checked = showDateInAmbient,
-                        onCheckedChange = { storage.setShowDateInAmbient(it) },
-                        iconDrawable = R.drawable.ic_outline_calendar_today,
-                    )
-                }
-
-                if (isUserPremium) {
-                    item(key= "ComplicationsInAmbientMode") {
-                        val showComplicationsInAmbient by storage.watchShowComplicationsInAmbientMode().collectAsState(storage.showComplicationsInAmbientMode())
-
-                        SettingToggleChip(
-                            label = "Widgets in ambient mode",
-                            checked = showComplicationsInAmbient,
-                            onCheckedChange = { storage.setShowComplicationsInAmbientMode(it) },
-                            iconDrawable = R.drawable.ic_settings_power,
-                        )
-                    }
-                }
-
-                if (isUserPremium && (showWatchBattery || showPhoneBattery)) {
-                    item(key = "ShowBatteryInAmbientMode") {
-                        val hideBatteryInAmbient by storage.watchHideBatteryInAmbient().collectAsState(storage.hideBatteryInAmbient())
-
-                        SettingToggleChip(
-                            label = "Show battery indicators in ambient mode",
-                            checked = !hideBatteryInAmbient,
-                            onCheckedChange = { storage.setHideBatteryInAmbient(!it) },
-                            iconDrawable = R.drawable.ic_settings_power,
-                            modifier = Modifier.heightIn(min = 70.dp),
-                        )
-                    }
-                }
-
-                item(key = "SupportSection") {
-                    SettingSectionItem(
-                        label = "Support",
-                    )
-                }
-
-                item(key = "GiveFeedback") {
-                    SettingChip(
-                        label = "Give your feedback",
-                        onClick = {
-                            storage.setRatingDisplayed(true)
-                            startActivity(Intent(this@SettingsActivity, FeedbackActivity::class.java))
-                        },
-                        iconDrawable = R.drawable.ic_thumbs_up_down,
-                    )
-                }
-
-                if (isUserPremium) {
-                    item(key = "Donate") {
-                        SettingChip(
-                            label = "Donate to support development",
-                            onClick = ::openAppForDonationOnPhone,
-                            iconDrawable = R.drawable.ic_baseline_add_reaction,
-                        )
-                    }
-                }
+                SupportSection(
+                    isUserPremium = isUserPremium,
+                )
 
                 item(key = "FooterVersion") {
                     Text(
@@ -558,6 +202,562 @@ class SettingsActivity : ComponentActivity() {
                         text ="Made by Benoit Letondor",
                     )
                 }
+            }
+        }
+    }
+
+    private fun LazyListScope.WidgetsOrBecomePremiumSection(
+        isUserPremium: Boolean,
+        useAndroid12: Boolean,
+        showPhoneBattery: Boolean,
+        showWatchBattery: Boolean,
+        showNotifications: Boolean,
+        showWearOSLogo: Boolean,
+    ) {
+
+
+        if (isUserPremium) {
+            item(key = "WidgetsSection") { SettingSectionItem(label = "Widgets") }
+
+            if (useAndroid12) {
+                item(key = "Android12Complications") {
+                    Android12Complications()
+                }
+            } else {
+                item(key = "RegularComplications") {
+                    RegularComplications(
+                        showBattery = showPhoneBattery || showWatchBattery,
+                    )
+                }
+            }
+
+            item(key = "WidgetSize") {
+                val widgetsSize by storage.watchWidgetsSize().collectAsState(storage.getWidgetsSize())
+                val context = LocalContext.current
+
+                SettingSlider(
+                    iconDrawable = R.drawable.ic_baseline_photo_size_select_small_24,
+                    onValueChange = { newValue ->
+                        storage.setWidgetsSize(newValue)
+                    },
+                    value = widgetsSize,
+                    title = "Size of widgets: ${context.fontDisplaySizeToHumanReadableString(widgetsSize)}",
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        } else {
+            item(key = "PremiumSection") { SettingSectionItem(label = "Premium features") }
+
+            item(key = "PremiumCompanion") {
+                Column {
+                    Text(
+                        text = "To setup widgets, display weather, battery indicators and notification icons you have to become a premium user.",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillParentMaxWidth(),
+                    )
+
+                    Text(
+                        text = "You can buy it from the phone companion app and sync it with your watch to setup premium features right here.",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillParentMaxWidth(),
+                    )
+
+                    SettingChip(
+                        label ="Become premium",
+                        onClick = ::openAppOnPhone,
+                        iconDrawable = R.drawable.ic_baseline_stars_24,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+
+                    Text(
+                        text = "Already bought premium? Sync it from the phone app using the \"Troubleshoot\" button.",
+                        textAlign = TextAlign.Center,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .fillParentMaxWidth()
+                            .padding(top = 10.dp),
+                    )
+                }
+            }
+        }
+
+        if (!showNotifications || !useAndroid12) {
+            item(key = "ShowWearOSLogo") {
+                SettingToggleChip(
+                    label = if (useAndroid12 || !isUserPremium) { "Show WearOS logo" } else { "WearOS logo as middle widget" },
+                    checked = showWearOSLogo,
+                    onCheckedChange = { storage.setShowWearOSLogo(it) },
+                    iconDrawable = R.drawable.ic_wear_os_logo_white,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+        }
+    }
+
+    private fun LazyListScope.BatteryIndicatorSection(
+        useAndroid12: Boolean,
+        showWatchBattery: Boolean,
+    ) {
+        item(key = "BatteryIndicatorSection") {
+            SettingSectionItem(
+                label = "Display battery status",
+                includeBottomPadding = false,
+            )
+        }
+
+        if (!useAndroid12) {
+            item(key = "BatteryIndicatorBottomWidgetWarning") {
+                Text(
+                    text = "Activating any battery indicator replaces the bottom widget",
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                )
+            }
+        }
+
+        item(key = "WatchBatteryIndicator") {
+            val context = LocalContext.current
+
+            SettingToggleChip(
+                label = "Watch battery indicator",
+                checked = showWatchBattery,
+                onCheckedChange = { showBattery ->
+                    if (showBattery) {
+                        startActivityForResult(
+                            ComplicationHelperActivity.createPermissionRequestHelperIntent(
+                                context,
+                                watchFaceComponentName
+                            ),
+                            COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE
+                        )
+                    } else {
+                        storage.setShowWatchBattery(false)
+                    }
+                },
+                iconDrawable = R.drawable.ic_baseline_battery_charging_full,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+
+        item(key = "PhoneBatteryIndicator") {
+            SettingChip(
+                label = "(Beta) Phone battery indicator setup",
+                onClick = {
+                    startActivityForResult(
+                        Intent(this@SettingsActivity, PhoneBatteryConfigurationActivity::class.java),
+                        COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE,
+                    )
+                },
+                iconDrawable = R.drawable.ic_phone,
+            )
+        }
+
+        item(key = "BatteryIndicatorsColor") {
+            SettingChip(
+                label = "Battery indicators colors",
+                secondaryLabel = "(doesn't affect ambient)",
+                onClick = {
+                    startActivityForResult(
+                        ColorSelectionActivity.createIntent(
+                            this@SettingsActivity,
+                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                        ),
+                        BATTERY_COLOR_REQUEST_CODE
+                    )
+                },
+                iconDrawable = R.drawable.ic_palette_24,
+                modifier = Modifier.heightIn(min = 73.dp),
+            )
+        }
+    }
+
+    private fun LazyListScope.NotificationsDisplaySection(
+        useAndroid12: Boolean,
+    ) {
+        item(key = "NotificationsDisplaySection") {
+            SettingSectionItem(
+                label = "Display phone notifications",
+                includeBottomPadding = false,
+            )
+        }
+
+        if (useAndroid12) {
+            item(key = "NotificationsDisplayBottomWidgetWarning") {
+                Text(
+                    text = "Activating notifications display replaces the WearOS logo",
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                )
+            }
+        } else {
+            item(key = "NotificationsDisplayBottomWidgetWarning") {
+                Text(
+                    text = "Activating notifications display replaces the bottom widget",
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                )
+            }
+        }
+
+        item(key = "NotificationsDisplayButton") {
+            SettingChip(
+                label = "(Beta) Phone notification icons",
+                onClick = {
+                    startActivityForResult(
+                        Intent(this@SettingsActivity, NotificationsSyncConfigurationActivity::class.java),
+                        NOTIFICATIONS_SYNC_SETUP_REQUEST_CODE,
+                    )
+                },
+                iconDrawable = R.drawable.ic_baseline_circle_notifications_24,
+            )
+        }
+
+        item(key = "NotificationsDisplayColor") {
+            SettingChip(
+                label = "Notification icons colors",
+                secondaryLabel = "(doesn't affect ambient)",
+                onClick = {
+                    startActivityForResult(
+                        ColorSelectionActivity.createIntent(
+                            this@SettingsActivity,
+                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                        ),
+                        NOTIFICATIONS_COLOR_REQUEST_CODE
+                    )
+                },
+                iconDrawable = R.drawable.ic_palette_24,
+                modifier = Modifier.heightIn(min = 73.dp),
+            )
+        }
+    }
+
+    private fun LazyListScope.DateTimeSection(
+        isUserPremium: Boolean,
+        isScreenRound: Boolean,
+        weatherProviderInfo: WeatherProviderInfo?,
+    ) {
+        item(key = "DateTimeSection") {
+            SettingSectionItem(
+                label = "Time and date",
+                includeBottomPadding = false,
+            )
+        }
+
+        item(key = "ShortDateFormat") {
+            val useShortDateFormat by storage.watchUseShortDateFormat().collectAsState(storage.getUseShortDateFormat())
+
+            SettingToggleChip(
+                label = "Use short date format",
+                checked = useShortDateFormat,
+                onCheckedChange = { storage.setUseShortDateFormat(it) },
+                iconDrawable = R.drawable.ic_baseline_short_text,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+
+        if( isUserPremium && weatherProviderInfo != null ) {
+            item(key = "ShowWeather") {
+                val showWeather by storage.watchShowWeather().collectAsState(storage.showWeather())
+                val context = LocalContext.current
+
+                Column {
+                    SettingToggleChip(
+                        label = "Show weather after date",
+                        checked = showWeather,
+                        onCheckedChange = { showWeather ->
+                            if (showWeather) {
+                                startActivityForResult(
+                                    ComplicationHelperActivity.createPermissionRequestHelperIntent(
+                                        context,
+                                        watchFaceComponentName
+                                    ),
+                                    COMPLICATION_WEATHER_PERMISSION_REQUEST_CODE
+                                )
+                            } else {
+                                storage.setShowWeather(false)
+                            }
+                        },
+                        iconDrawable = R.drawable.ic_weather_partly_cloudy,
+                    )
+
+                    if (showWeather) {
+                        Text(
+                            text = "Temperature scale (°F or °C) is controlled by the Weather app.",
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(start = 40.dp, bottom = 4.dp),
+                        )
+
+                        SettingChip(
+                            label = "Open Weather app for setup",
+                            onClick = {
+                                weatherProviderInfo.let { weatherProviderInfo ->
+                                    openActivity(weatherProviderInfo.appPackage, weatherProviderInfo.weatherActivityName)
+                                }
+                            },
+                            iconDrawable = null,
+                            modifier = Modifier.padding(start = 40.dp, bottom = 8.dp),
+                        )
+                    }
+                }
+
+            }
+        }
+
+        item(key = "24hTimeFormatSetting") {
+            val use24hTimeFormat by storage.watchUse24hTimeFormat().collectAsState(storage.getUse24hTimeFormat())
+
+            SettingToggleChip(
+                label = "Use 24h time format",
+                checked = use24hTimeFormat,
+                onCheckedChange = { storage.setUse24hTimeFormat(it) },
+                iconDrawable = R.drawable.ic_access_time,
+            )
+        }
+
+        item(key = "TimeSize") {
+            val timeSize by storage.watchTimeSize().collectAsState(storage.getTimeSize())
+            val context = LocalContext.current
+
+            SettingSlider(
+                iconDrawable = R.drawable.ic_baseline_format_size,
+                onValueChange = { newValue ->
+                    storage.setTimeSize(newValue)
+                },
+                value = timeSize,
+                title = "Size of time: ${context.fontDisplaySizeToHumanReadableString(timeSize)}",
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        item(key = "DateAndBatterySize") {
+            val dateAndBatterySize by storage.watchDateAndBatterySize().collectAsState(storage.getDateAndBatterySize())
+            val context = LocalContext.current
+
+            SettingSlider(
+                iconDrawable = R.drawable.ic_baseline_format_size,
+                onValueChange = { newValue ->
+                    storage.setDateAndBatterySize(newValue)
+                },
+                value = dateAndBatterySize,
+                title = "Size of date & battery: ${context.fontDisplaySizeToHumanReadableString(dateAndBatterySize)}",
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        item(key = "TimeColor") {
+            SettingChip(
+                label = "Time color",
+                secondaryLabel = "(doesn't affect ambient)",
+                onClick = {
+                    startActivityForResult(
+                        ColorSelectionActivity.createIntent(
+                            this@SettingsActivity,
+                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                        ),
+                        TIME_COLOR_REQUEST_CODE
+                    )
+                },
+                iconDrawable = R.drawable.ic_palette_24,
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .heightIn(min = 70.dp),
+            )
+        }
+
+        item(key = "DateColor") {
+            SettingChip(
+                label = "Date color",
+                secondaryLabel = "(doesn't affect ambient)",
+                onClick = {
+                    startActivityForResult(
+                        ColorSelectionActivity.createIntent(
+                            this@SettingsActivity,
+                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                        ),
+                        DATE_COLOR_REQUEST_CODE
+                    )
+                },
+                iconDrawable = R.drawable.ic_palette_24,
+                modifier = Modifier
+                    .heightIn(min = 70.dp),
+            )
+        }
+
+        if( isScreenRound ) {
+            item(key = "ShowSecondsRing") {
+                val showSecondsRing by storage.watchShowSecondsRing().collectAsState(storage.showSecondsRing())
+
+                Column {
+                    SettingToggleChip(
+                        label = "Show seconds ring",
+                        checked = showSecondsRing,
+                        onCheckedChange = { storage.setShowSecondsRing(it) },
+                        iconDrawable = R.drawable.ic_baseline_panorama_fish_eye,
+                    )
+
+                    if (showSecondsRing) {
+                        SettingChip(
+                            label = "Seconds ring color",
+                            onClick = {
+                                startActivityForResult(
+                                    ColorSelectionActivity.createIntent(
+                                        this@SettingsActivity,
+                                        ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                                    ),
+                                    SECONDS_RING_COLOR_REQUEST_CODE
+                                )
+                            },
+                            iconDrawable = R.drawable.ic_palette_24,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun LazyListScope.TimeStyleSection() {
+        item(key = "TimeStyleSection") {
+            SettingSectionItem(
+                label = "Time style",
+            )
+        }
+
+        item(key = "ThinTimeWatchOn") {
+            val useThinTimeStyleInRegularMode by storage.watchUseThinTimeStyleInRegularMode().collectAsState(storage.useThinTimeStyleInRegularMode())
+
+            SettingToggleChip(
+                label = "Use thin time style when watch is on",
+                checked = useThinTimeStyleInRegularMode,
+                onCheckedChange = { storage.setUseThinTimeStyleInRegularMode(it) },
+                iconDrawable = R.drawable.ic_baseline_invert_colors,
+                modifier = Modifier.heightIn(min = 70.dp),
+            )
+        }
+
+        item(key = "NormalTimeWatchOff") {
+            val useNormalTimeStyleInAmbientMode by storage.watchUseNormalTimeStyleInAmbientMode().collectAsState(storage.useNormalTimeStyleInAmbientMode())
+
+            SettingToggleChip(
+                label = "Use normal in place of thin time style in ambient mode",
+                checked = useNormalTimeStyleInAmbientMode,
+                onCheckedChange = { storage.setUseNormalTimeStyleInAmbientMode(it) },
+                iconDrawable = R.drawable.ic_baseline_invert_colors_off,
+                modifier = Modifier.heightIn(min = 70.dp),
+            )
+        }
+    }
+
+    private fun LazyListScope.AmbientSection(
+        isUserPremium: Boolean,
+        showWatchBattery: Boolean,
+        showPhoneBattery: Boolean,
+        showNotifications: Boolean,
+        useAndroid12: Boolean,
+        showWearOSLogo: Boolean,
+    ) {
+        item(key = "AmbientSection") {
+            SettingSectionItem(
+                label = "Ambient mode",
+            )
+        }
+
+        item(key = "ShowDateInAmbientMode") {
+            val showDateInAmbient by storage.watchShowDateInAmbient().collectAsState(storage.getShowDateInAmbient())
+
+            SettingToggleChip(
+                label = "Show date in ambient mode",
+                checked = showDateInAmbient,
+                onCheckedChange = { storage.setShowDateInAmbient(it) },
+                iconDrawable = R.drawable.ic_outline_calendar_today,
+            )
+        }
+
+        if (isUserPremium) {
+            item(key= "ComplicationsInAmbientMode") {
+                val showComplicationsInAmbient by storage.watchShowComplicationsInAmbientMode().collectAsState(storage.showComplicationsInAmbientMode())
+
+                SettingToggleChip(
+                    label = "Widgets in ambient mode",
+                    checked = showComplicationsInAmbient,
+                    onCheckedChange = { storage.setShowComplicationsInAmbientMode(it) },
+                    iconDrawable = R.drawable.ic_settings_power,
+                )
+            }
+        }
+
+        if (isUserPremium && (showWatchBattery || showPhoneBattery)) {
+            item(key = "ShowBatteryInAmbientMode") {
+                val hideBatteryInAmbient by storage.watchHideBatteryInAmbient().collectAsState(storage.hideBatteryInAmbient())
+
+                SettingToggleChip(
+                    label = "Show battery indicators in ambient mode",
+                    checked = !hideBatteryInAmbient,
+                    onCheckedChange = { storage.setHideBatteryInAmbient(!it) },
+                    iconDrawable = R.drawable.ic_settings_power,
+                    modifier = Modifier.heightIn(min = 70.dp),
+                )
+            }
+        }
+
+        if (isUserPremium && showNotifications) {
+            item(key = "ShowNotificationsInAmbientMode") {
+                val showNotificationsInAmbient by storage.watchShowNotificationsInAmbient().collectAsState(storage.getShowNotificationsInAmbient())
+
+                SettingToggleChip(
+                    label = "Show notifications in ambient mode",
+                    checked = showNotificationsInAmbient,
+                    onCheckedChange = { storage.setShowNotificationsInAmbient(it) },
+                    iconDrawable = R.drawable.ic_baseline_notifications_none_24,
+                    modifier = Modifier.heightIn(min = 70.dp),
+                )
+            }
+        }
+
+        if (showWearOSLogo && (!showNotifications || !useAndroid12)) {
+            item(key = "ShowWearOSLogoInAmbientMode") {
+                val showWearOSLogoInAmbient by storage.watchShowWearOSLogoInAmbient().collectAsState(storage.getShowWearOSLogoInAmbient())
+
+                SettingToggleChip(
+                    label = "Show Wear OS logo in ambient mode",
+                    checked = showWearOSLogoInAmbient,
+                    onCheckedChange = { storage.setShowWearOSLogoInAmbient(it) },
+                    iconDrawable = R.drawable.ic_wear_os_logo_white,
+                    modifier = Modifier.heightIn(min = 70.dp),
+                )
+            }
+        }
+    }
+
+    private fun LazyListScope.SupportSection(
+        isUserPremium: Boolean
+    ) {
+        item(key = "SupportSection") {
+            SettingSectionItem(
+                label = "Support",
+            )
+        }
+
+        item(key = "GiveFeedback") {
+            SettingChip(
+                label = "Give your feedback",
+                onClick = {
+                    storage.setRatingDisplayed(true)
+                    startActivity(Intent(this@SettingsActivity, FeedbackActivity::class.java))
+                },
+                iconDrawable = R.drawable.ic_thumbs_up_down,
+            )
+        }
+
+        if (isUserPremium) {
+            item(key = "Donate") {
+                SettingChip(
+                    label = "Donate to support development",
+                    onClick = ::openAppForDonationOnPhone,
+                    iconDrawable = R.drawable.ic_baseline_add_reaction,
+                )
             }
         }
     }
@@ -699,7 +899,7 @@ class SettingsActivity : ComponentActivity() {
         } else if ( requestCode == TIME_AND_DATE_COLOR_REQUEST_CODE && resultCode == RESULT_OK ) {
             val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
             if (color != null) {
-                storage.setTimeAndDateColor(color.color)
+                storage.setDateColor(color.color)
             }
         } else if ( requestCode == BATTERY_COLOR_REQUEST_CODE && resultCode == RESULT_OK ) {
             val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
@@ -718,6 +918,11 @@ class SettingsActivity : ComponentActivity() {
                     COMPLICATION_CONFIG_REQUEST_CODE,
                 )
                 overridePendingTransition(0, 0)
+            }
+        } else if (requestCode == NOTIFICATIONS_COLOR_REQUEST_CODE && resultCode == RESULT_OK) {
+            val color = data?.getParcelableExtra<ComplicationColor>(ColorSelectionActivity.RESULT_SELECTED_COLOR)
+            if (color != null) {
+                storage.setNotificationIconsColor(color.color)
             }
         }
     }
@@ -876,9 +1081,12 @@ class SettingsActivity : ComponentActivity() {
         private const val COMPLICATION_BATTERY_PERMISSION_REQUEST_CODE = 1004
         private const val COMPLICATION_CONFIG_REQUEST_CODE = 1005
         private const val COMPLICATION_PHONE_BATTERY_SETUP_REQUEST_CODE = 1006
-        private const val TIME_AND_DATE_COLOR_REQUEST_CODE = 1007
+        private const val TIME_COLOR_REQUEST_CODE = 1007
         private const val BATTERY_COLOR_REQUEST_CODE = 1008
         private const val SECONDS_RING_COLOR_REQUEST_CODE = 1009
+        private const val NOTIFICATIONS_SYNC_SETUP_REQUEST_CODE = 1010
+        private const val NOTIFICATIONS_COLOR_REQUEST_CODE = 1011
+        private const val DATE_COLOR_REQUEST_CODE = 1012
 
         var currentEditorSession: EditorSession? = null
     }

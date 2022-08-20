@@ -32,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.core.graphics.drawable.toBitmap
 import androidx.wear.watchface.complications.ComplicationDataSourceInfo
 import com.benoitletondor.pixelminimalwatchface.R
+import com.benoitletondor.pixelminimalwatchface.helper.toBitmap
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
 
 @Composable

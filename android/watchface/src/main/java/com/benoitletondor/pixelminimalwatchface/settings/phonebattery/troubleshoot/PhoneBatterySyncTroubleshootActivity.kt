@@ -31,7 +31,7 @@ import androidx.wear.compose.material.Text
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.compose.WearTheme
 import com.benoitletondor.pixelminimalwatchface.compose.component.ExplanationText
-import com.benoitletondor.pixelminimalwatchface.compose.component.RotatoryAwareScalingLazyColumn
+import com.benoitletondor.pixelminimalwatchface.compose.component.RotatoryAwareLazyColumn
 
 class PhoneBatterySyncTroubleshootActivity : ComponentActivity() {
 
@@ -40,9 +40,8 @@ class PhoneBatterySyncTroubleshootActivity : ComponentActivity() {
 
         setContent {
             WearTheme {
-                RotatoryAwareScalingLazyColumn(
-                    autoCentering = AutoCenteringParams(itemIndex = 0),
-                    contentPadding = PaddingValues(horizontal = 20.dp),
+                RotatoryAwareLazyColumn(
+                    horizontalPadding = 20.dp,
                 ) {
                     item {
                         Text(
@@ -56,15 +55,15 @@ class PhoneBatterySyncTroubleshootActivity : ComponentActivity() {
                     }
 
                     item {
-                        Column {
-                            ExplanationText(
-                                text = "To sync your phone battery with your watch, your phone needs to be able to send updates to your watch.",
-                            )
+                        ExplanationText(
+                            text = "To sync your phone battery with your watch, your phone needs to be able to send updates to your watch.",
+                        )
+                    }
 
-                            ExplanationText(
-                                text = "This is still in beta as multiple things can fail during this process, from bluetooth issues to WearOS specific problems.",
-                            )
-                        }
+                    item {
+                        ExplanationText(
+                            text = "This is still in beta as multiple things can fail during this process, from bluetooth issues to WearOS specific problems.",
+                        )
                     }
 
                     item {

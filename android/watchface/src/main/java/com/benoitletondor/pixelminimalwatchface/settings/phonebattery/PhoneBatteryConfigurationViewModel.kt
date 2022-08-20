@@ -21,19 +21,20 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.benoitletondor.pixelminimalwatchface.Injection
+import com.benoitletondor.pixelminimalwatchface.helper.MutableLiveFlow
 import com.benoitletondor.pixelminimalwatchface.helper.await
+import com.benoitletondor.pixelminimalwatchface.helper.findBestCompanionNode
+import com.benoitletondor.pixelminimalwatchface.helper.startPhoneBatterySync
+import com.benoitletondor.pixelminimalwatchface.helper.stopPhoneBatterySync
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 private const val DATA_KEY_SYNC_ACTIVATED = "/batterySync/syncActivated"
 private const val QUERY_SYNC_STATUS_PATH = "/batterySync/queryStatus"
-private const val QUERY_ACTIVATED_SYNC_PATH = "/batterySync/activate"
-private const val QUERY_DEACTIVATED_SYNC_PATH = "/batterySync/deactivate"
 
 class PhoneBatteryConfigurationViewModel(
     application: Application
@@ -47,10 +48,10 @@ class PhoneBatteryConfigurationViewModel(
 
     val stateFlow: StateFlow<State> = mutableStateFlow
 
-    private val errorEventMutableFlow = MutableSharedFlow<ErrorEventType>()
+    private val errorEventMutableFlow = MutableLiveFlow<ErrorEventType>()
     val errorEventFlow: Flow<ErrorEventType> = errorEventMutableFlow
 
-    private val retryEventMutableFlow = MutableSharedFlow<Unit>()
+    private val retryEventMutableFlow = MutableLiveFlow<Unit>()
     val retryEventFlow: Flow<Unit> = retryEventMutableFlow
 
     private var syncStatusQueryJob: Job? = null
@@ -96,11 +97,11 @@ class PhoneBatteryConfigurationViewModel(
     }
 
     fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
-        capabilityInfo.nodes.findBestNode()?.let { onPhoneNodeFound(it) }
+        capabilityInfo.nodes.findBestCompanionNode()?.let { onPhoneNodeFound(it) }
     }
 
     fun onPhoneAppDetectionResult(nodes: Set<Node>) {
-        nodes.findBestNode()?.let { onPhoneNodeFound(it) }
+        nodes.findBestCompanionNode()?.let { onPhoneNodeFound(it) }
     }
 
     fun onPhoneAppDetectionFailed(error: Throwable) {
@@ -256,24 +257,4 @@ class PhoneBatteryConfigurationViewModel(
     companion object {
         private const val TAG = "PhoneBatteryConfigurationVM"
     }
-}
-
-fun Set<Node>.findBestNode(): Node? {
-    return firstOrNull { it.isNearby } ?: firstOrNull()
-}
-
-suspend fun Node.startPhoneBatterySync(context: Context) {
-    Wearable.getMessageClient(context).sendMessage(
-        id,
-        QUERY_ACTIVATED_SYNC_PATH,
-        null,
-    ).await()
-}
-
-suspend fun Node.stopPhoneBatterySync(context: Context) {
-    Wearable.getMessageClient(context).sendMessage(
-        id,
-        QUERY_DEACTIVATED_SYNC_PATH,
-        null,
-    ).await()
 }

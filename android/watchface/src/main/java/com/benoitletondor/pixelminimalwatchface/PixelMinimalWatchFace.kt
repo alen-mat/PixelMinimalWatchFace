@@ -30,13 +30,24 @@ import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
-import com.benoitletondor.pixelminimalwatchface.model.*
-import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.PhoneBatteryConfigurationActivity
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
+import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION
+import com.benoitletondor.pixelminimalwatchface.model.Storage
+import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
+import com.benoitletondor.pixelminimalwatchface.settings.notificationssync.NotificationsSyncConfigurationActivity
+import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.*
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.time.ZonedDateTime
+import java.lang.ref.WeakReference
+import java.time.LocalDateTime
+import java.util.*
+import java.util.concurrent.Executors
+import kotlin.math.max
 
+
+const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 private const val DATA_KEY_PREMIUM = "premium"
 private const val DATA_KEY_BATTERY_STATUS_PERCENT = "/batterySync/batteryStatus"
 private const val THREE_DAYS_MS: Long = 1000 * 60 * 60 * 24 * 3L
@@ -48,6 +59,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
     private lateinit var storage: Storage
     private lateinit var complicationsSlots: ComplicationsSlots
+    private lateinit var phoneNotifications: PhoneNotifications
 
     override fun onCreate() {
         super.onCreate()
@@ -55,6 +67,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
         if (DEBUG_LOGS) Log.d(TAG, "onCreate, security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
 
         storage = Injection.storage(this)
+        phoneNotifications = PhoneNotifications(this@PixelMinimalWatchFace)
         ComplicationsProviders.init(this, ComplicationsSlots.COMPLICATION_IDS)
 
         // Set app version to the current one if not set yet (first launch)
@@ -463,9 +476,17 @@ class PixelMinimalWatchFace : WatchFaceService() {
                 if (event.type == DataEvent.TYPE_CHANGED) {
                     val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
 
-                    if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
-                        handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
+                    when(event.dataItem.uri.path) {
+                        "/premium" -> {
+                            if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
+                                handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
+                            }
+                        }
+                        "/notifications" -> {
+                            phoneNotifications.onNewData(dataMap)
+                        }
                     }
+
                 }
             }
         }
@@ -487,6 +508,23 @@ class PixelMinimalWatchFace : WatchFaceService() {
                     Log.e("PixelWatchFace", "Error while parsing premium status from phone", t)
                     Toast.makeText(context, R.string.premium_error, Toast.LENGTH_LONG).show()
                 }
+            }
+
+            launch {
+                storage.watchIsNotificationsSyncActivated()
+                    .collectLatest { activated ->
+                        if (!activated) {
+                            Log.d(TAG, "Notifications from phone deactivated: invalidate")
+                            invalidate()
+                        } else {
+                            phoneNotifications.notificationsStateFlow
+                                .collect { state ->
+                                    Log.d(TAG, "Notifications from phone received, invalidate: $state")
+                                    invalidate()
+                                }
+                        }
+                    }
+
             }
         }
     }

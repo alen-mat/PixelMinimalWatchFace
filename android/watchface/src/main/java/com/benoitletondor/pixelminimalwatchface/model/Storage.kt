@@ -53,15 +53,21 @@ private const val KEY_SECONDS_RING = "secondsRing"
 private const val KEY_SHOW_WEATHER = "showWeather"
 private const val KEY_SHOW_WATCH_BATTERY = "showBattery"
 private const val KEY_SHOW_PHONE_BATTERY = "showPhoneBattery"
-private const val KEY_FEATURE_DROP_2021_NOTIFICATION = "featureDrop2021Notification_5"
+private const val KEY_FEATURE_DROP_2022_NOTIFICATION = "featureDrop2022Notification_2"
 private const val KEY_USE_SHORT_DATE_FORMAT = "useShortDateFormat"
 private const val KEY_SHOW_DATE_AMBIENT = "showDateAmbient"
-private const val KEY_TIME_AND_DATE_COLOR = "timeAndDateColor"
+private const val KEY_TIME_COLOR = "timeAndDateColor"
+private const val KEY_DATE_COLOR = "dateColor"
 private const val KEY_BATTERY_COLOR = "batteryColor"
 private const val KEY_USE_ANDROID_12_STYLE = "useAndroid12Style"
 private const val KEY_HIDE_BATTERY_IN_AMBIENT = "hideBatteryInAmbient"
 private const val KEY_SECONDS_RING_COLOR = "secondsRingColor"
 private const val KEY_WIDGETS_SIZE = "widgetSize"
+private const val KEY_NOTIFICATIONS_SYNC_ENABLED = "notificationsSyncEnabled"
+private const val KEY_NOTIFICATION_ICONS_COLOR = "notificationIconsColor"
+private const val KEY_SHOW_NOTIFICATIONS_AMBIENT = "showNotificationsAmbient"
+private const val KEY_SHOW_WEAR_OS_LOGO_AMBIENT = "showWearOSLogoAmbient"
+private const val KEY_BETA_NOTIFICATIONS_DISCLAIMER_SHOWN = "betaNotificationsDisclaimerBeenShown"
 
 interface Storage {
     fun getComplicationColors(): ComplicationColors
@@ -105,8 +111,8 @@ interface Storage {
     fun showWatchBattery(): Boolean
     fun setShowWatchBattery(show: Boolean)
     fun watchShowWatchBattery(): Flow<Boolean>
-    fun hasFeatureDropSummer2021NotificationBeenShown(): Boolean
-    fun setFeatureDropSummer2021NotificationShown()
+    fun hasFeatureDropSummer2022NotificationBeenShown(): Boolean
+    fun setFeatureDropSummer2022NotificationShown()
     fun getUseShortDateFormat(): Boolean
     fun setUseShortDateFormat(useShortDateFormat: Boolean)
     fun watchUseShortDateFormat(): Flow<Boolean>
@@ -116,9 +122,12 @@ interface Storage {
     fun showPhoneBattery(): Boolean
     fun setShowPhoneBattery(show: Boolean)
     fun watchShowPhoneBattery(): Flow<Boolean>
-    @ColorInt fun getTimeAndDateColor(): Int
-    fun getTimeAndDateColorFilter(): ColorFilter
-    fun setTimeAndDateColor(@ColorInt color: Int)
+    @ColorInt fun getTimeColor(): Int
+    fun getTimeColorFilter(): ColorFilter
+    fun setTimeColor(@ColorInt color: Int)
+    @ColorInt fun getDateColor(): Int
+    fun getDateColorFilter(): ColorFilter
+    fun setDateColor(@ColorInt color: Int)
     @ColorInt fun getBatteryIndicatorColor(): Int
     fun getBatteryIndicatorColorFilter(): ColorFilter
     fun setBatteryIndicatorColor(@ColorInt color: Int)
@@ -133,6 +142,20 @@ interface Storage {
     fun getWidgetsSize(): Int
     fun setWidgetsSize(widgetsSize: Int)
     fun watchWidgetsSize(): Flow<Int>
+    fun isNotificationsSyncActivated(): Boolean
+    fun setNotificationsSyncActivated(activated: Boolean)
+    fun watchIsNotificationsSyncActivated(): Flow<Boolean>
+    fun setNotificationIconsColor(@ColorInt color: Int)
+    @ColorInt fun getNotificationIconsColor(): Int
+    fun getNotificationIconsColorFilter(): ColorFilter
+    fun getShowNotificationsInAmbient(): Boolean
+    fun setShowNotificationsInAmbient(show: Boolean)
+    fun watchShowNotificationsInAmbient(): Flow<Boolean>
+    fun getShowWearOSLogoInAmbient(): Boolean
+    fun setShowWearOSLogoInAmbient(show: Boolean)
+    fun watchShowWearOSLogoInAmbient(): Flow<Boolean>
+    fun hasBetaNotificationsDisclaimerBeenShown(): Boolean
+    fun setBetaNotificationsDisclaimerShown()
 }
 
 class StorageImpl(
@@ -155,7 +178,8 @@ class StorageImpl(
     private val useShortDateFormatCache = StorageCachedBoolValue(sharedPreferences, KEY_USE_SHORT_DATE_FORMAT, false)
     private val showDateInAmbientCache = StorageCachedBoolValue(sharedPreferences, KEY_SHOW_DATE_AMBIENT, true)
     private val showPhoneBatteryCache = StorageCachedBoolValue(sharedPreferences, KEY_SHOW_PHONE_BATTERY, false)
-    private val timeAndDateColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_TIME_AND_DATE_COLOR, R.color.white)
+    private val timeColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_TIME_COLOR, R.color.white)
+    private val dateColorCache = StorageCachedResolvedColorValue(sharedPreferences, KEY_DATE_COLOR, timeColorCache.get().color)
     private val batteryIndicatorColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_BATTERY_COLOR, R.color.white)
     private val cacheComplicationsColorMutableFlow = MutableStateFlow(loadComplicationColors())
     private val useAndroid12StyleCache = StorageCachedBoolValue(sharedPreferences, KEY_USE_ANDROID_12_STYLE, false)
@@ -165,6 +189,11 @@ class StorageImpl(
     private val useNormalTimeStyleInAmbientModeCache = StorageCachedBoolValue(sharedPreferences, KEY_USE_NORMAL_TIME_STYLE_IN_AMBIENT, false)
     private val useThinTimeStyleInNormalModeCache = StorageCachedBoolValue(sharedPreferences, KEY_USE_THIN_TIME_STYLE_IN_REGULAR, false)
     private val hasRatingBeenDisplayedCache = StorageCachedBoolValue(sharedPreferences, KEY_RATING_NOTIFICATION_SENT, false)
+    private val notificationsSyncEnabledCache = StorageCachedBoolValue(sharedPreferences, KEY_NOTIFICATIONS_SYNC_ENABLED, false)
+    private val notificationIconsColorCache = StorageCachedColorValue(sharedPreferences, appContext, KEY_NOTIFICATION_ICONS_COLOR, R.color.white)
+    private val showNotificationsInAmbientCache = StorageCachedBoolValue(sharedPreferences, KEY_SHOW_NOTIFICATIONS_AMBIENT, false)
+    private val showWearOSLogoInAmbientCache = StorageCachedBoolValue(sharedPreferences, KEY_SHOW_WEAR_OS_LOGO_AMBIENT, true)
+    private val betaNotificationsDisclaimerShownCache = StorageCachedBoolValue(sharedPreferences, KEY_BETA_NOTIFICATIONS_DISCLAIMER_SHOWN, false)
 
     init {
         if( getInstallTimestamp() < 0 ) {
@@ -378,11 +407,17 @@ class StorageImpl(
 
     override fun watchShowPhoneBattery(): Flow<Boolean> = showPhoneBatteryCache.watchChanges()
 
-    override fun getTimeAndDateColor(): Int = timeAndDateColorCache.get().color
+    override fun getTimeColor(): Int = timeColorCache.get().color
 
-    override fun getTimeAndDateColorFilter(): ColorFilter = timeAndDateColorCache.get().colorFilter
+    override fun getTimeColorFilter(): ColorFilter = timeColorCache.get().colorFilter
 
-    override fun setTimeAndDateColor(color: Int) = timeAndDateColorCache.set(color)
+    override fun setTimeColor(color: Int) = timeColorCache.set(color)
+
+    override fun getDateColor(): Int = dateColorCache.get().color
+
+    override fun getDateColorFilter(): ColorFilter = dateColorCache.get().colorFilter
+
+    override fun setDateColor(color: Int) = dateColorCache.set(color)
 
     override fun getBatteryIndicatorColor(): Int = batteryIndicatorColorCache.get().color
 
@@ -412,12 +447,41 @@ class StorageImpl(
 
     override fun watchWidgetsSize(): Flow<Int> = widgetsSizeCache.watchChanges()
 
-    override fun hasFeatureDropSummer2021NotificationBeenShown(): Boolean {
-        return sharedPreferences.getBoolean(KEY_FEATURE_DROP_2021_NOTIFICATION, false)
+    override fun isNotificationsSyncActivated(): Boolean = notificationsSyncEnabledCache.get()
+
+    override fun setNotificationsSyncActivated(activated: Boolean) = notificationsSyncEnabledCache.set(activated)
+
+    override fun watchIsNotificationsSyncActivated(): Flow<Boolean> = notificationsSyncEnabledCache.watchChanges()
+
+    override fun setNotificationIconsColor(@ColorInt color: Int) = notificationIconsColorCache.set(color)
+
+    @ColorInt
+    override fun getNotificationIconsColor(): Int = notificationIconsColorCache.get().color
+
+    override fun getNotificationIconsColorFilter(): ColorFilter = notificationIconsColorCache.get().colorFilter
+
+    override fun getShowNotificationsInAmbient(): Boolean = showNotificationsInAmbientCache.get()
+
+    override fun setShowNotificationsInAmbient(show: Boolean) = showNotificationsInAmbientCache.set(show)
+
+    override fun watchShowNotificationsInAmbient(): Flow<Boolean> = showNotificationsInAmbientCache.watchChanges()
+
+    override fun getShowWearOSLogoInAmbient(): Boolean = showWearOSLogoInAmbientCache.get()
+
+    override fun setShowWearOSLogoInAmbient(show: Boolean) = showWearOSLogoInAmbientCache.set(show)
+
+    override fun watchShowWearOSLogoInAmbient(): Flow<Boolean> = showWearOSLogoInAmbientCache.watchChanges()
+
+    override fun hasBetaNotificationsDisclaimerBeenShown(): Boolean = betaNotificationsDisclaimerShownCache.get()
+
+    override fun setBetaNotificationsDisclaimerShown() = betaNotificationsDisclaimerShownCache.set(true)
+
+    override fun hasFeatureDropSummer2022NotificationBeenShown(): Boolean {
+        return sharedPreferences.getBoolean(KEY_FEATURE_DROP_2022_NOTIFICATION, false)
     }
 
-    override fun setFeatureDropSummer2021NotificationShown() {
-        sharedPreferences.edit().putBoolean(KEY_FEATURE_DROP_2021_NOTIFICATION, true).apply()
+    override fun setFeatureDropSummer2022NotificationShown() {
+        sharedPreferences.edit().putBoolean(KEY_FEATURE_DROP_2022_NOTIFICATION, true).apply()
     }
 
     override fun getUseShortDateFormat(): Boolean = useShortDateFormatCache.get()

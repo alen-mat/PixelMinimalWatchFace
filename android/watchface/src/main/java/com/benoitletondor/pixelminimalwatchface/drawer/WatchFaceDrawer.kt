@@ -16,7 +16,6 @@
 package com.benoitletondor.pixelminimalwatchface.drawer
 
 import android.graphics.Canvas
-import android.graphics.Rect
 import android.support.wearable.complications.ComplicationData
 import androidx.wear.watchface.TapEvent
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
@@ -30,13 +29,13 @@ interface WatchFaceDrawer {
     fun isTapOnWeather(tapEvent: TapEvent): Boolean
     fun isTapOnCenterOfScreen(tapEvent: TapEvent): Boolean
     fun isTapOnBattery(tapEvent: TapEvent): Boolean
+    fun isTapOnNotifications(x: Int, y: Int): Boolean
 
     fun draw(
         canvas: Canvas,
-        bounds: Rect,
-        zonedDateTime: ZonedDateTime,
         weatherComplicationData: ComplicationData?,
         phoneBatteryValue: String?,
         watchBatteryValue: Int?,
+        notificationsState: PhoneNotifications.NotificationState?,
     )
 }
