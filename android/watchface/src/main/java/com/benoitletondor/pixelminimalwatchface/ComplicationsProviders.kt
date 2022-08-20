@@ -66,6 +66,18 @@ class ComplicationsProviders(
         complicationProviderSparseArray.put(slotId, complicationProvider)
     }
 
+    fun setComplicationDataSource(slotId: Int, componentName: ComponentName?) {
+        if (DEBUG_LOGS) Log.d(TAG, "complicationDataSourceComponentUpdate: $slotId -> $componentName")
+
+        if (componentName != null) {
+            val complicationProvider = ComplicationProvider.Component(componentName)
+
+            updateGalaxyWatch4ComplicationSlots(complicationProvider, slotId)
+
+            complicationProviderSparseArray.put(slotId, complicationProvider)
+        }
+    }
+
     fun getComplicationProvider(slotId: Int): ComplicationProvider? {
         return complicationProviderSparseArray.get(slotId)
     }

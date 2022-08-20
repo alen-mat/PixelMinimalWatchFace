@@ -490,6 +490,8 @@ class ComplicationsSlots(
                 slot.complicationData.collect { complicationData ->
                     if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData: $location, data: $complicationData")
 
+                    ComplicationsProviders.getInstance().setComplicationDataSource(slot.id, complicationData.dataSource)
+
                     val newComplicationData = complicationData.sanitizeForSamsungGalaxyWatchIfNeeded(
                         context,
                         storage,
