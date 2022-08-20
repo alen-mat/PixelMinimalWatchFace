@@ -30,25 +30,17 @@ import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.android12.Android12DigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
-import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
-import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.DEFAULT_APP_VERSION
 import com.benoitletondor.pixelminimalwatchface.model.PhoneBatteryStatus
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.model.getBatteryText
 import com.benoitletondor.pixelminimalwatchface.model.getValue
-import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
 import com.benoitletondor.pixelminimalwatchface.settings.notificationssync.NotificationsSyncConfigurationActivity
 import com.benoitletondor.pixelminimalwatchface.settings.phonebattery.*
 import com.google.android.gms.wearable.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.lang.ref.WeakReference
-import java.time.LocalDateTime
 import java.time.ZonedDateTime
-import java.util.*
-import java.util.concurrent.Executors
-import kotlin.math.max
 
 private const val DATA_KEY_PREMIUM = "premium"
 private const val DATA_KEY_BATTERY_STATUS_PERCENT = "/batterySync/batteryStatus"
@@ -80,7 +72,9 @@ class PixelMinimalWatchFace : WatchFaceService() {
         if (DEBUG_LOGS) Log.d(TAG, "onDestroy")
         
         scope.cancel()
-        complicationsSlots.onDestroy()
+        if(this::complicationsSlots.isInitialized) {
+            complicationsSlots.onDestroy()
+        }
 
         super.onDestroy()
     }
@@ -292,6 +286,40 @@ class PixelMinimalWatchFace : WatchFaceService() {
                         context.startActivity(Intent(context, FullBrightnessActivity::class.java).apply {
                             flags = FLAG_ACTIVITY_NEW_TASK
                         })
+                    }
+                }
+                storage.isUserPremium() &&
+                    storage.showPhoneBattery() &&
+                    batteryPhoneSyncHelper.phoneBatteryStatus.isStale(System.currentTimeMillis()) &&
+                    watchFaceDrawer.isTapOnBattery(tapEvent) -> {
+                    context.startActivity(Intent(context, PhoneBatteryConfigurationActivity::class.java).apply {
+                        flags = FLAG_ACTIVITY_NEW_TASK
+                    })
+                }
+                storage.isUserPremium() &&
+                    storage.isNotificationsSyncActivated() &&
+                    watchFaceDrawer.isTapOnNotifications(tapEvent) -> {
+                    when(val currentState = phoneNotifications.notificationsStateFlow.value) {
+                        is PhoneNotifications.NotificationState.DataReceived -> {
+                            if (currentState.icons.isNotEmpty()) {
+                                Toast.makeText(
+                                    context,
+                                    if (Device.isSamsungGalaxyWatch) {
+                                        "Swipe from left to go to notifications"
+                                    } else {
+                                        "Swipe from bottom to go to notifications"
+                                    },
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                        is PhoneNotifications.NotificationState.Unknown -> {
+                            if (currentState.isStale(System.currentTimeMillis())) {
+                                context.startActivity(Intent(context, NotificationsSyncConfigurationActivity::class.java).apply {
+                                    flags = FLAG_ACTIVITY_NEW_TASK
+                                })
+                            }
+                        }
                     }
                 }
             }

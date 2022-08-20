@@ -133,7 +133,7 @@ class ComplicationsProviders(
                 add(complicationSlotId)
             }
         } else {
-            if (complicationSlotId in galaxyWatch4HeartRateComplicationsIdsMutableFlow.value) {
+            if (!isGalaxyWatch4HeartRateComplication && complicationSlotId in galaxyWatch4HeartRateComplicationsIdsMutableFlow.value) {
                 if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 HR complication removed, id: $complicationSlotId")
 
                 galaxyWatch4HeartRateComplicationsIdsMutableFlow.value = HashSet(galaxyWatch4HeartRateComplicationsIdsMutableFlow.value).apply {
@@ -155,7 +155,7 @@ class ComplicationsProviders(
                 add(complicationSlotId)
             }
         } else {
-            if (complicationSlotId in calendarBuggyComplicationsIdsMutableFlow.value) {
+            if (!isGalaxyWatch4CalendarComplication && complicationSlotId in calendarBuggyComplicationsIdsMutableFlow.value) {
                 if (DEBUG_LOGS) Log.d(TAG, "watchComplicationSlotsData, GW4 buggy calendar complication removed, id: $complicationSlotId")
 
                 calendarBuggyComplicationsIdsMutableFlow.value = HashSet(calendarBuggyComplicationsIdsMutableFlow.value).apply {

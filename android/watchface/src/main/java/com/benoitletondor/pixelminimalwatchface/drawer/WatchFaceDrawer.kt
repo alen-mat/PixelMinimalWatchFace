@@ -31,7 +31,7 @@ interface WatchFaceDrawer {
     fun isTapOnWeather(tapEvent: TapEvent): Boolean
     fun isTapOnCenterOfScreen(tapEvent: TapEvent): Boolean
     fun isTapOnBattery(tapEvent: TapEvent): Boolean
-    fun isTapOnNotifications(x: Int, y: Int): Boolean
+    fun isTapOnNotifications(tapEvent: TapEvent): Boolean
 
     fun draw(
         canvas: Canvas,

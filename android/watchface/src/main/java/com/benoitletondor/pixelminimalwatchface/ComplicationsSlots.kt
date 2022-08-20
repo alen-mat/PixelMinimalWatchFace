@@ -22,7 +22,6 @@ import android.graphics.Canvas
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
-import android.util.SparseArray
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.wear.watchface.*
@@ -39,6 +38,7 @@ import androidx.wear.watchface.style.CurrentUserStyleRepository
 import androidx.wear.watchface.style.UserStyleSetting
 import androidx.wear.watchface.style.WatchFaceLayer
 import com.benoitletondor.pixelminimalwatchface.helper.sanitizeForSamsungGalaxyWatchIfNeeded
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationColors
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.model.getPrimaryColorForComplication
@@ -56,7 +56,7 @@ class ComplicationsSlots(
 
     private val activeSlots: MutableStateFlow<Set<ComplicationLocation>> = MutableStateFlow(emptySet())
     private val activeComplicationWatchingJobs: MutableList<Job> = mutableListOf()
-    private val overrideComplicationData: SparseArray<ComplicationData> = SparseArray()
+    private val overrideComplicationData: MutableStateFlow<Map<Int, ComplicationData>> = MutableStateFlow(emptyMap())
 
     private lateinit var complicationSlotsManager: ComplicationSlotsManager
 
@@ -306,6 +306,13 @@ class ComplicationsSlots(
         }
     }
 
+    private data class ComplicationStyle(
+        val hasIcon: Boolean,
+        val hasLongTitle: Boolean,
+        val hasShortTitle: Boolean,
+        val complicationColors: ComplicationColors,
+    )
+
     @SuppressLint("RestrictedApi")
     private fun watchComplicationDataAndColorChanges() {
         complicationSlotsManager.complicationSlots.forEach { (_, slot) ->
@@ -326,17 +333,26 @@ class ComplicationsSlots(
 
             scope.launch {
                 slot.complicationData
-                    .combine(
-                        storage.watchComplicationColors()
-                    ) { data, colors ->
-                        Pair (data.asWireComplicationData(), colors)
+                    .combine(overrideComplicationData) { rawData, overriddenData ->
+                        overriddenData[slot.id]?.asWireComplicationData() ?: rawData.asWireComplicationData()
                     }
-                    .collect { (data, colors) ->
-                        val primaryComplicationColor = colors.getPrimaryColorForComplication(location)
+                    .combine(storage.watchComplicationColors()) { data, colors ->
+                        ComplicationStyle(
+                            data.icon != null,
+                            data.longTitle != null,
+                            data.shortTitle != null,
+                            colors,
+                        )
+                    }
+                    .distinctUntilChanged()
+                    .collect { style ->
+                        if (DEBUG_LOGS) Log.d(TAG, "watchComplicationDataAndColorChanges. Slot id: ${slot.id}, style: $style")
+
+                        val primaryComplicationColor = style.complicationColors.getPrimaryColorForComplication(location)
                         drawable.activeStyle.iconColor = primaryComplicationColor
 
-                        if( data.icon != null ) {
-                            if( location == ComplicationLocation.BOTTOM && ( data.longTitle != null ) ) {
+                        if( style.hasIcon ) {
+                            if( location == ComplicationLocation.BOTTOM && style.hasLongTitle ) {
                                 drawable.activeStyle.textColor = primaryComplicationColor
                                 drawable.ambientStyle.textColor = dateAndBatteryColorDimmed
                             } else {
@@ -344,7 +360,7 @@ class ComplicationsSlots(
                                 drawable.ambientStyle.textColor = complicationTitleColor
                             }
 
-                            if( location != ComplicationLocation.BOTTOM && data.shortTitle == null ) {
+                            if( location != ComplicationLocation.BOTTOM && style.hasShortTitle ) {
                                 drawable.activeStyle.textSize = titleSize
                                 drawable.ambientStyle.textSize = titleSize
                             } else {
@@ -381,7 +397,7 @@ class ComplicationsSlots(
             }
         }
 
-        overrideComplicationData.clear()
+        overrideComplicationData.value = emptyMap()
         activeSlots.value = activeLocations
 
         updateComplicationSetting()
@@ -404,10 +420,10 @@ class ComplicationsSlots(
             )
 
             if (newComplicationData != null) {
-                overrideComplicationData.put(slot.id, newComplicationData)
+                overrideComplicationData.value =  overrideComplicationData.value.plus(slot.id to newComplicationData)
                 invalidateRendererMutableEventFlow.emit(Unit)
             } else {
-                overrideComplicationData.remove(slot.id)
+                overrideComplicationData.value = overrideComplicationData.value.minus(slot.id)
             }
         }
     }
@@ -469,7 +485,7 @@ class ComplicationsSlots(
                     zonedDateTime,
                     rendererParameters,
                     slot.id,
-                    overrideComplicationData[slot.id],
+                    overrideComplicationData.value[slot.id],
                 )
             }
         }
@@ -500,10 +516,10 @@ class ComplicationsSlots(
                     )
 
                     if (newComplicationData != null) {
-                        overrideComplicationData.put(slot.id, newComplicationData)
+                        overrideComplicationData.value = overrideComplicationData.value.plus(slot.id to newComplicationData)
                         invalidateRendererMutableEventFlow.emit(Unit)
                     } else {
-                        overrideComplicationData.remove(slot.id)
+                        overrideComplicationData.value = overrideComplicationData.value.minus(slot.id)
                     }
                 }
             }
@@ -520,7 +536,10 @@ class ComplicationsSlots(
                 complicationSlot.complicationData.collect { complicationData ->
                     try {
                         complicationData.asWireComplicationData().shortText?.getTextAt(context.resources, System.currentTimeMillis())?.let { text ->
-                            val batteryChargePercentage = text.substring(0, text.indexOf("%")).toInt()
+                            if (DEBUG_LOGS) Log.d(TAG, "batteryComplicationData raw data received: $text")
+
+                            val percentIndex = text.indexOf("%")
+                            val batteryChargePercentage = text.substring(0, if (percentIndex > 0) { percentIndex} else {text.length} ).toInt()
                             watchBatteryLevelMutableFlow.emit(batteryChargePercentage)
 
                             if (DEBUG_LOGS) Log.d(TAG, "batteryComplicationData received: $batteryChargePercentage")

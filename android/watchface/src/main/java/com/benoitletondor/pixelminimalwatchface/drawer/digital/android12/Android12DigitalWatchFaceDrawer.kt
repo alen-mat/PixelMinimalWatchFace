@@ -160,10 +160,10 @@ class Android12DigitalWatchFaceDrawer(
         return drawingState.tapIsOnBattery(tapEvent.xPos, tapEvent.yPos)
     }
 
-    override fun isTapOnNotifications(x: Int, y: Int): Boolean {
+    override fun isTapOnNotifications(tapEvent: TapEvent): Boolean {
         val drawingState = drawingState as? Android12DrawingState.CacheAvailable ?: return false
 
-        return drawingState.isTapOnNotifications(x, y)
+        return drawingState.isTapOnNotifications(tapEvent.xPos, tapEvent.yPos)
     }
 
     override fun draw(
