@@ -22,7 +22,6 @@ import android.util.Log
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.toBitmap
 import androidx.wear.watchface.TapEvent
 import androidx.wear.watchface.WatchState
 import androidx.wear.watchface.style.CurrentUserStyleRepository
@@ -31,7 +30,6 @@ import com.benoitletondor.pixelminimalwatchface.DEBUG_LOGS
 import com.benoitletondor.pixelminimalwatchface.PhoneNotifications
 import com.benoitletondor.pixelminimalwatchface.R
 import com.benoitletondor.pixelminimalwatchface.drawer.WatchFaceDrawer
-import com.benoitletondor.pixelminimalwatchface.drawer.digital.regular.RegularDigitalWatchFaceDrawer
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
@@ -261,6 +259,7 @@ class Android12DigitalWatchFaceDrawer(
     private fun watchNotificationIconsSyncChanges() {
         scope.launch {
             storage.watchIsNotificationsSyncActivated()
+                .drop(1)
                 .collectLatest {
                     recomputeDrawingStateAndReRender()
                 }

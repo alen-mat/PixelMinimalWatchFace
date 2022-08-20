@@ -6,6 +6,10 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.collection.LruCache
 import com.benoitletondor.pixelminimalwatchface.helper.await
+import com.benoitletondor.pixelminimalwatchface.helper.findBestCompanionNode
+import com.benoitletondor.pixelminimalwatchface.helper.startNotificationsSync
+import com.benoitletondor.pixelminimalwatchface.helper.stopNotificationsSync
+import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.google.android.gms.wearable.Asset
 import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.Wearable
@@ -17,6 +21,7 @@ import java.util.*
 
 class PhoneNotifications(
     private val context: Context,
+    private val storage: Storage,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -27,6 +32,32 @@ class PhoneNotifications(
 
     fun onDestroy() {
         scope.cancel()
+    }
+
+    fun sync() {
+        if (DEBUG_LOGS) Log.d(TAG, "syncNotificationsDisplayStatus")
+
+        scope.launch {
+            try {
+                val capabilityInfo = Wearable.getCapabilityClient(context)
+
+                val phoneNode = capabilityInfo.findBestCompanionNode()
+                if (DEBUG_LOGS) Log.d(TAG, "syncNotificationsDisplayStatus, phone node: $phoneNode")
+
+                if (storage.isNotificationsSyncActivated()) {
+                    if (DEBUG_LOGS) Log.d(TAG, "syncNotificationsDisplayStatus, startNotificationsSync")
+                    phoneNode?.startNotificationsSync(context)
+                } else {
+                    if (DEBUG_LOGS) Log.d(TAG, "syncNotificationsDisplayStatus, stopNotificationsSync")
+                    phoneNode?.stopNotificationsSync(context)
+                }
+
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+
+                Log.e(TAG, "Error while sending notifications sync signal", e)
+            }
+        }
     }
 
     fun onNewData(dataMap: DataMap) {

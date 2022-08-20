@@ -50,8 +50,6 @@ import java.util.*
 import java.util.concurrent.Executors
 import kotlin.math.max
 
-
-const val MISC_NOTIFICATION_CHANNEL_ID = "rating"
 private const val DATA_KEY_PREMIUM = "premium"
 private const val DATA_KEY_BATTERY_STATUS_PERCENT = "/batterySync/batteryStatus"
 private const val THREE_DAYS_MS: Long = 1000 * 60 * 60 * 24 * 3L
@@ -189,13 +187,12 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
         private val batteryPhoneSyncHelper = BatteryPhoneSyncHelper(context, storage)
         private val batteryWatchSyncHelper = BatteryWatchSyncHelper(context, complicationsSlots)
-        private val phoneNotifications: PhoneNotifications
+        private val phoneNotifications = PhoneNotifications(context, storage)
 
         private var lastTapOnCenterOfScreenEventTimestamp: Long = 0
 
         init {
             watchFaceDrawer = createWatchFaceDrawer(storage.useAndroid12Style())
-            phoneNotifications = PhoneNotifications(context)
 
             watchWatchFaceDrawerChanges()
             watchGalaxyWatch4HRComplications()
@@ -212,6 +209,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
             batteryPhoneSyncHelper.start()
             batteryWatchSyncHelper.start()
+            phoneNotifications.sync()
         }
 
         override fun onDestroy() {
