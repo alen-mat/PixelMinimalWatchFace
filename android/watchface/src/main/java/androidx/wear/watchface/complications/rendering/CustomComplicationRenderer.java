@@ -44,8 +44,9 @@ import java.time.Instant;
 import java.util.Objects;
 
 /*
- * Copy/Paste of the "ComplicationRenderer" class with 1 main difference: it uses "CustomLayoutUtils.getInnerBounds"
- * instead of "LayoutUtils.getInnerBounds"
+ * Copy/Paste of the "ComplicationRenderer" class with 2 main difference:
+ * - it uses "CustomLayoutUtils.getInnerBounds" instead of "LayoutUtils.getInnerBounds"
+ * - it uses "CustomTextRendrer" instead of TextRenderer for mMainTextRenderer & mSubTextRenderer
  */
 
 @SuppressLint("RestrictedApi")
@@ -164,10 +165,10 @@ class CustomComplicationRenderer {
 
     // Text renderers
     @VisibleForTesting
-    TextRenderer mMainTextRenderer = new TextRenderer();
+    CustomTextRenderer mMainTextRenderer = new CustomTextRenderer();
 
     @VisibleForTesting
-    TextRenderer mSubTextRenderer = new TextRenderer();
+    CustomTextRenderer mSubTextRenderer = new CustomTextRenderer();
 
     // Bounds for components. NB we want to avoid allocations in watch face rendering code to
     // reduce GC pressure.

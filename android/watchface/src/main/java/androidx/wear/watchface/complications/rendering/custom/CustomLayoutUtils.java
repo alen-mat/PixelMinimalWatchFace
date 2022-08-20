@@ -20,7 +20,7 @@ import android.graphics.Rect;
 import androidx.annotation.NonNull;
 
 public class CustomLayoutUtils {
-    private final static float customRatio = 1.3f;
+    private final static float customRatio = 1.6f;
 
     public static void getInnerBounds(@NonNull Rect outRect, @NonNull Rect inRect, float radius) {
         outRect.set(inRect);
