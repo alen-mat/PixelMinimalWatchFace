@@ -57,7 +57,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
     override fun onCreate() {
         super.onCreate()
 
-        if (DEBUG_LOGS) Log.d(TAG, "onCreate, security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}")
+        if (DEBUG_LOGS) Log.d(TAG, "onCreateEngine. Security Patch: ${Build.VERSION.SECURITY_PATCH}, OS version : ${Build.VERSION.INCREMENTAL}, Brand: ${Build.BRAND}, Model: ${Build.MODEL}")
 
         storage = Injection.storage(this)
         ComplicationsProviders.init(this, ComplicationsSlots.COMPLICATION_IDS)
@@ -566,6 +566,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
     companion object {
         const val HALF_HOUR_MS: Long = 1000*60*30
+        private const val TEN_MINS_MS = 1000*60*10
 
         fun isActive(context: Context): Boolean {
             val wallpaperManager = WallpaperManager.getInstance(context)

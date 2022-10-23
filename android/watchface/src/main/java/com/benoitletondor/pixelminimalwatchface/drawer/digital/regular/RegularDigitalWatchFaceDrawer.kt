@@ -408,7 +408,7 @@ class RegularDigitalWatchFaceDrawer(
             timeFormatter24H.format(date)
         } else {
             timeFormatter12H.format(date)
-        }
+        }.let { if (it.take(3) == "24:") "00${it.substring(2)}" else it } // Make sure 24h is converted to 00
         val timeXOffset = centerX - (timePaint.measureText(timeText) / 2f)
         canvas.drawText(timeText, timeXOffset, timeYOffset, timePaint)
 

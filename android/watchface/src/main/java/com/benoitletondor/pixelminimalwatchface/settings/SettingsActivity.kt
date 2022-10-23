@@ -51,6 +51,7 @@ import com.benoitletondor.pixelminimalwatchface.compose.*
 import com.benoitletondor.pixelminimalwatchface.compose.component.*
 import com.benoitletondor.pixelminimalwatchface.helper.*
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationColor
+import com.benoitletondor.pixelminimalwatchface.model.ComplicationColorsProvider
 import com.benoitletondor.pixelminimalwatchface.model.ComplicationLocation
 import com.benoitletondor.pixelminimalwatchface.model.Storage
 import com.benoitletondor.pixelminimalwatchface.rating.FeedbackActivity
@@ -363,7 +364,7 @@ class SettingsActivity : ComponentActivity() {
                     startActivityForResult(
                         ColorSelectionActivity.createIntent(
                             this@SettingsActivity,
-                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                            ComplicationColor(getColor(R.color.white), ComplicationColorsProvider.defaultColorName, true)
                         ),
                         BATTERY_COLOR_REQUEST_CODE
                     )
@@ -423,7 +424,7 @@ class SettingsActivity : ComponentActivity() {
                     startActivityForResult(
                         ColorSelectionActivity.createIntent(
                             this@SettingsActivity,
-                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                            ComplicationColor(getColor(R.color.white), ComplicationColorsProvider.defaultColorName, true)
                         ),
                         NOTIFICATIONS_COLOR_REQUEST_CODE
                     )
@@ -559,7 +560,7 @@ class SettingsActivity : ComponentActivity() {
                     startActivityForResult(
                         ColorSelectionActivity.createIntent(
                             this@SettingsActivity,
-                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                            ComplicationColor(getColor(R.color.white), ComplicationColorsProvider.defaultColorName, true)
                         ),
                         TIME_COLOR_REQUEST_CODE
                     )
@@ -579,7 +580,7 @@ class SettingsActivity : ComponentActivity() {
                     startActivityForResult(
                         ColorSelectionActivity.createIntent(
                             this@SettingsActivity,
-                            ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                            ComplicationColor(getColor(R.color.white), ComplicationColorsProvider.defaultColorName, true)
                         ),
                         DATE_COLOR_REQUEST_CODE
                     )
@@ -609,7 +610,7 @@ class SettingsActivity : ComponentActivity() {
                                 startActivityForResult(
                                     ColorSelectionActivity.createIntent(
                                         this@SettingsActivity,
-                                        ComplicationColor(getColor(R.color.white), getString(R.string.color_default), true)
+                                        ComplicationColor(getColor(R.color.white), ComplicationColorsProvider.defaultColorName, true)
                                     ),
                                     SECONDS_RING_COLOR_REQUEST_CODE
                                 )
@@ -731,6 +732,21 @@ class SettingsActivity : ComponentActivity() {
                     onCheckedChange = { storage.setShowWearOSLogoInAmbient(it) },
                     iconDrawable = R.drawable.ic_wear_os_logo_white,
                     modifier = Modifier.heightIn(min = 70.dp),
+                )
+            }
+        }
+        
+        if (Device.isWearOS3) {
+            item(key = "showColorsInAmbient") {
+                val showComplicationsColorInAmbient by storage.watchShowColorsInAmbientMode().collectAsState(storage.showColorsInAmbientMode())
+
+                SettingToggleChip(
+                    label = "Colors in ambient mode",
+                    secondaryLabel = "Caution: can increase battery usage",
+                    checked = showComplicationsColorInAmbient,
+                    onCheckedChange = { storage.setShowColorsInAmbientMode(it) },
+                    iconDrawable = R.drawable.ic_palette_24,
+                    modifier = Modifier.heightIn(min = 90.dp),
                 )
             }
         }
