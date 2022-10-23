@@ -21,6 +21,7 @@ import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import android.view.SurfaceHolder
 import android.widget.Toast
@@ -191,6 +192,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
             watchWatchFaceDrawerChanges()
             watchGalaxyWatch4HRComplications()
             watchGalaxyWatch4CalendarComplications()
+            watchAmbientScreenGoingOffBug()
             watchComplicationSlotsRendererInvalidate()
             watchPhoneBatteryHelperRendererInvalidate()
             watchWatchBatteryHelperRendererInvalidate()
@@ -391,6 +393,45 @@ class PixelMinimalWatchFace : WatchFaceService() {
             }
         }
 
+        private fun watchAmbientScreenGoingOffBug() {
+            if (!hasAmbientDisplayGoingOffBug) {
+                return
+            }
+
+            if (DEBUG_LOGS) Log.d(TAG, "watchAmbientScreenGoingOffBug")
+
+            scope.launch {
+                watchState.isAmbient
+                    .filterNotNull()
+                    .collectLatest { isAmbient ->
+                        if (isAmbient) {
+                            if (DEBUG_LOGS) Log.d(TAG, "watchAmbientScreenGoingOffBug: Ambient starts")
+
+                            delay(TEN_MINS_MS)
+
+                            if (DEBUG_LOGS) Log.d(TAG, "watchAmbientScreenGoingOffBug: Start activity")
+
+                            try {
+                                val pw = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                                val wl: PowerManager.WakeLock = pw.newWakeLock(
+                                    PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                                    "pixelwatchface:awakescreen"
+                                )
+
+                                wl.acquire(1000)
+                                wl.release()
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+
+                                Log.e(TAG, "watchAmbientScreenGoingOffBug: Error while acquiring WL", e)
+                            }
+                        } else {
+                            if (DEBUG_LOGS) Log.d(TAG, "watchAmbientScreenGoingOffBug: Ambient stops")
+                        }
+                    }
+            }
+        }
+
         private fun watchComplicationSlotsRendererInvalidate() {
             scope.launch {
                 complicationsSlots.invalidateRendererEventFlow
@@ -524,22 +565,26 @@ class PixelMinimalWatchFace : WatchFaceService() {
         }
 
         override fun onDataChanged(dataEvents: DataEventBuffer) {
-            for (event in dataEvents) {
-                if (event.type == DataEvent.TYPE_CHANGED) {
-                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+            try {
+                for (event in dataEvents) {
+                    if (event.type == DataEvent.TYPE_CHANGED) {
+                        val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
 
-                    when(event.dataItem.uri.path) {
-                        "/premium" -> {
-                            if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
-                                handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
+                        when(event.dataItem.uri.path) {
+                            "/premium" -> {
+                                if (dataMap.containsKey(DATA_KEY_PREMIUM)) {
+                                    handleIsPremiumCallback(dataMap.getBoolean(DATA_KEY_PREMIUM))
+                                }
+                            }
+                            "/notifications" -> {
+                                phoneNotifications.onNewData(dataMap)
                             }
                         }
-                        "/notifications" -> {
-                            phoneNotifications.onNewData(dataMap)
-                        }
-                    }
 
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error while handling onDataChanged", e)
             }
         }
 
@@ -566,7 +611,7 @@ class PixelMinimalWatchFace : WatchFaceService() {
 
     companion object {
         const val HALF_HOUR_MS: Long = 1000*60*30
-        private const val TEN_MINS_MS = 1000*60*10
+        private const val TEN_MINS_MS: Long = 1000*60*10
 
         fun isActive(context: Context): Boolean {
             val wallpaperManager = WallpaperManager.getInstance(context)

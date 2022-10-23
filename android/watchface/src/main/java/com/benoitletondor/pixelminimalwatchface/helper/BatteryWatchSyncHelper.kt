@@ -57,7 +57,7 @@ class BatteryWatchSyncHelper(
                 Log.d(TAG, "awake")
 
                 val lastWatchBatteryStatus = watchBatteryStatus
-                if (Device.isSamsungGalaxyWatch &&
+                if (hasWidgetFrozenBug &&
                     lastWatchBatteryStatus is WatchBatteryStatus.DataReceived) {
                     ensureBatteryDataIsUpToDateOrReload(lastWatchBatteryStatus)
                 }
